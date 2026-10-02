@@ -12,29 +12,6 @@
   display: block;
 }
 
-.hub-brand {
-  position: absolute;
-  top: 28px;
-  left: 36px;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  pointer-events: none;
-}
-
-.hub-brand-mark {
-  font-size: 34px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-}
-
-.hub-brand-sub {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.3em;
-  color: var(--ink-sub);
-}
-
 /* 中央の時計（地球儀の手前） */
 .clock {
   position: absolute;
@@ -141,14 +118,12 @@
   pointer-events: none;
 }
 
-.hub.is-focused .clock,
-.hub.is-focused .hub-brand {
+.hub.is-focused .clock {
   opacity: 0.25;
   transition: opacity 500ms var(--ease-out);
 }
 
-.clock,
-.hub-brand {
+.clock {
   transition: opacity 500ms var(--ease-out);
 }
 
@@ -160,13 +135,3 @@
   transition: opacity 500ms var(--ease-out);
 }
 
-@media (max-width: 600px) {
-  .hub-brand {
-    top: 18px;
-    left: 18px;
-  }
-
-  .hub-brand-mark {
-    font-size: 26px;
-  }
-}

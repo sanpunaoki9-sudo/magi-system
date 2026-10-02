@@ -6,13 +6,14 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 
 const COLOR = '#5b86d6';
-const BAND_WIDTH = 0.34;
-const SEGMENTS = 512;
+const SEGMENTS = 1024;
 const TEXTURE = { width: 2048, height: 64, font: 'bold 28px Arial, sans-serif' };
 
-// r: 半径 / tilt: 手前への倒れ具合 / roll: 画面上の傾き / speed: コードの流れる速さ
+// r: 半径 / tilt: 倒れ具合（マイナスで奥側が上） / roll: 画面上の傾き / width: 帯の太さ / speed: コードの流れる速さ
+// 大きな輪をほぼ真横から見る形にして、奥側の弧だけが画面の端から端まで地球儀の後ろを横切る。
+// 手前側の弧は画面の下に外れて見えない。
 const ORBITS = [
-  { r: 4.6, tilt: 74, roll: -8, speed: 0.035 },
+  { r: 80, tilt: -83, roll: -6, width: 3.2, speed: 0.03 },
 ];
 
 const CODE = [
@@ -70,23 +71,24 @@ function ringPoints({ r, tilt, roll }, center, depth) {
     new THREE.Euler(THREE.MathUtils.degToRad(tilt), 0, THREE.MathUtils.degToRad(roll), 'ZXY'),
   );
   // 手前に一番出る点でも地球儀の中心より奥になるように下げる
-  const pushBack = r * Math.sin(THREE.MathUtils.degToRad(tilt)) + depth;
+  const pushBack = r * Math.abs(Math.sin(THREE.MathUtils.degToRad(tilt))) + depth;
   const origin = center.clone().add(new THREE.Vector3(0, 0, -pushBack));
 
   const points = [];
+  // 時計回りにたどると、奥側（画面の上側）の弧で文字が左から右へ正しい向きになる
   for (let i = 0; i <= SEGMENTS; i++) {
-    const a = (i / SEGMENTS) * Math.PI * 2;
+    const a = -(i / SEGMENTS) * Math.PI * 2;
     points.push(new THREE.Vector3(r * Math.cos(a), r * Math.sin(a), 0).applyQuaternion(rotation).add(origin));
   }
   return points;
 }
 
 // 帯はカメラの方を向けて、文字が読める向きにする
-function createBand(points, texture) {
+function createBand(points, texture, bandWidth) {
   const forward = new THREE.Vector3(0, 0, 1);
   const tangent = new THREE.Vector3();
   const side = new THREE.Vector3();
-  const tileLength = BAND_WIDTH * (TEXTURE.width / TEXTURE.height);
+  const tileLength = bandWidth * (TEXTURE.width / TEXTURE.height);
 
   const positions = [];
   const uvs = [];
@@ -98,8 +100,8 @@ function createBand(points, texture) {
     const prev = points[Math.max(0, i - 1)];
     const next = points[Math.min(points.length - 1, i + 1)];
     tangent.subVectors(next, prev).normalize();
-    // 文字の上側を輪の内側に向ける（奥側では逆さまになるが、鏡文字にはならない）
-    side.crossVectors(forward, tangent).normalize().multiplyScalar(BAND_WIDTH / 2);
+    // 文字の上側を輪の外側に向ける（見えている奥側の弧で正しい向きになる）
+    side.crossVectors(forward, tangent).normalize().multiplyScalar(bandWidth / 2);
     if (i > 0) length += p.distanceTo(points[i - 1]);
 
     const a = p.clone().add(side);
@@ -154,7 +156,7 @@ export function createOrbits({ center, globeRadius }) {
   const group = new THREE.Group();
   const rings = ORBITS.map((spec, i) => {
     const texture = createCodeTexture(i * 5);
-    const { band, edges } = createBand(ringPoints(spec, center, globeRadius * 0.2), texture);
+    const { band, edges } = createBand(ringPoints(spec, center, globeRadius * 0.2), texture, spec.width);
     const lines = edges.map(createEdge);
     group.add(band, ...lines);
     return { texture, lines, speed: spec.speed };

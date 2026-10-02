@@ -46,7 +46,7 @@ export function createHub({ canvas, tabLayer, tabs, onSelect }) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 100);
+  const camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 400);
 
   scene.add(new THREE.AmbientLight(0xffffff, 2.1));
   const sun = new THREE.DirectionalLight(0xffffff, 1.5);
