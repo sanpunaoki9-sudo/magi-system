@@ -13,7 +13,7 @@ const TEXTURE = { width: 2048, height: 64, font: 'bold 28px Arial, sans-serif' }
 // 大きな輪をほぼ真横から見る形にして、奥側の弧だけが画面の端から端まで地球儀の後ろを横切る。
 // 手前側の弧は画面の下に外れて見えない。
 const ORBITS = [
-  { r: 80, tilt: -83, roll: -6, width: 3.2, speed: 0.03 },
+  { r: 80, tilt: -82, roll: -6, width: 3.2, speed: 0.03 },
 ];
 
 const CODE = [

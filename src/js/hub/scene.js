@@ -10,13 +10,13 @@ import { createOrbits } from './orbits.js';
 const FOV = 38;
 const GLOBE_RADIUS = 1.5;
 const GLOBE_CENTER = new THREE.Vector3(0, 0, -2);
-// 丸タブを並べる楕円。縦長の画面では縦向きの楕円にする
+// 丸タブを並べる円。r: 円の半径 / tab: 丸タブの直径（どちらも3D空間の単位）
+// globe: 地球儀の大きさの倍率。縦長の画面では地球儀を少し小さくして、丸タブを大きめにする
 const RINGS = {
-  landscape: { rx: 4.6, ry: 2.55, depth: 1.2 },
-  portrait: { rx: 2.3, ry: 4.4, depth: 0.6 },
+  landscape: { r: 3.0, tab: 1.18, globe: 1 },
+  portrait: { r: 2.8, tab: 1.3, globe: 0.8 },
 };
-const TAB_WORLD_SIZE = 1.18;
-const FIT_MARGIN = 0.75;
+const FIT_MARGIN = 0.3;
 const INTRO_PULLBACK = 1.45;
 
 const COLORS = {
@@ -120,6 +120,7 @@ export function createHub({ canvas, tabLayer, tabs, onSelect }) {
   };
 
   const size = { w: 1, h: 1 };
+  let ring = RINGS.landscape;
 
   function resize() {
     size.w = window.innerWidth;
@@ -128,19 +129,15 @@ export function createHub({ canvas, tabLayer, tabs, onSelect }) {
     camera.aspect = size.w / size.h;
     camera.updateProjectionMatrix();
 
-    const ring = camera.aspect < 1 ? RINGS.portrait : RINGS.landscape;
+    ring = camera.aspect < 1 ? RINGS.portrait : RINGS.landscape;
+    globe.object.scale.setScalar(ring.globe);
     for (const node of nodes) {
-      node.home.set(
-        ring.rx * Math.cos(node.angle),
-        ring.ry * Math.sin(node.angle),
-        -ring.depth * Math.sin(node.angle),
-      );
+      node.home.set(ring.r * Math.cos(node.angle), ring.r * Math.sin(node.angle), 0);
     }
 
     const tanHalf = Math.tan(THREE.MathUtils.degToRad(FOV / 2));
-    const needV = (ring.ry + FIT_MARGIN) / tanHalf;
-    const needH = (ring.rx + FIT_MARGIN) / (tanHalf * camera.aspect);
-    view.homeDistance = Math.max(needV, needH) + ring.depth;
+    const reach = ring.r + ring.tab / 2 + FIT_MARGIN;
+    view.homeDistance = Math.max(reach / tanHalf, reach / (tanHalf * camera.aspect));
     if (!view.focused) {
       view.targetDistance = view.revealed ? view.homeDistance : view.homeDistance * INTRO_PULLBACK;
     }
@@ -187,7 +184,7 @@ export function createHub({ canvas, tabLayer, tabs, onSelect }) {
 
       // つなぐ線: 地球儀の表面の少し外から丸タブの中心まで
       dir.copy(node.pos).sub(GLOBE_CENTER).normalize();
-      start.copy(GLOBE_CENTER).addScaledVector(dir, GLOBE_RADIUS * 1.08);
+      start.copy(GLOBE_CENTER).addScaledVector(dir, GLOBE_RADIUS * ring.globe * 1.08);
       node.connector.geometry.setPositions([start.x, start.y, start.z, node.pos.x, node.pos.y, node.pos.z]);
 
       // 線の上を地球儀から丸タブへ流れる点
@@ -199,7 +196,7 @@ export function createHub({ canvas, tabLayer, tabs, onSelect }) {
       camSpace.copy(node.pos).applyMatrix4(camera.matrixWorldInverse);
       const depth = -camSpace.z;
       const pxPerUnit = size.h / (2 * tanHalf() * depth);
-      const diameter = Math.round(TAB_WORLD_SIZE * pxPerUnit);
+      const diameter = Math.round(ring.tab * pxPerUnit);
 
       tmp.copy(node.pos).project(camera);
       const x = (tmp.x * 0.5 + 0.5) * size.w;
