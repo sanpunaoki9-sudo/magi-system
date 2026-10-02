@@ -634,3 +634,369 @@ details.notice ul {
     font-size: 28px;
   }
 }
+
+/* ---------- エージェント（共通） ---------- */
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.state::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+
+.state-good::before {
+  background: #0ca30c;
+}
+
+.state-warning::before {
+  background: var(--warning);
+}
+
+.state-critical::before {
+  background: var(--critical);
+}
+
+.state-active::before {
+  background: var(--pink);
+  box-shadow: 0 0 0 3px var(--pink-soft);
+}
+
+.agent-cards,
+.quota-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.agent-card,
+.quota,
+.group {
+  background: var(--surface-2);
+  border-radius: 18px;
+  padding: 18px 20px;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  min-width: 0;
+}
+
+.agent-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.agent-name {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.agent-card-states {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.agent-card .state,
+.quota .state,
+.group .state {
+  background: var(--surface);
+}
+
+.agent-meta,
+.agent-strengths,
+.agent-note {
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.agent-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.agent-note {
+  font-size: 12px;
+}
+
+.agent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.agent-card .btn:not(.btn-primary),
+.quota .btn:not(.btn-primary),
+.quota .select {
+  background: var(--surface);
+}
+
+.tools .state {
+  background: var(--surface-2);
+}
+
+/* 依頼の一覧 */
+.jobs {
+  list-style: none;
+  display: grid;
+}
+
+.job {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--surface-2);
+  display: grid;
+  gap: 6px;
+  max-width: 920px;
+}
+
+.job-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 13px;
+}
+
+.job-agent {
+  font-weight: 700;
+}
+
+.job-title {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.job-detail {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.job-error {
+  font-size: 12px;
+  color: #8a1f1f;
+  overflow-wrap: anywhere;
+}
+
+.job-output summary {
+  font-size: 12px;
+  color: var(--ink-sub);
+  cursor: pointer;
+}
+
+.job-output pre {
+  margin-top: 8px;
+  max-height: 240px;
+  overflow: auto;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.job-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 指令室 */
+.command-form {
+  display: grid;
+  gap: 12px;
+  max-width: 920px;
+}
+
+.plan {
+  max-width: 920px;
+}
+
+.plan-rows {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.plan-row {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+}
+
+.groups {
+  display: grid;
+  gap: 12px;
+  max-width: 920px;
+}
+
+/* 作業ブランチ */
+.branches,
+.commits {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.branch {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 16px;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  font-size: 13px;
+}
+
+.branch-name {
+  font-weight: 700;
+}
+
+.branch-stat {
+  font-variant-numeric: tabular-nums;
+}
+
+.plus {
+  color: #0a7a0a;
+}
+
+.minus {
+  color: var(--critical);
+}
+
+.commits li {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.commits code {
+  font-family: Consolas, "Courier New", monospace;
+  color: var(--ink-sub);
+}
+
+/* 利用枠 */
+.quota-meter {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.quota-meter .meter {
+  background: var(--surface);
+}
+
+.quota p.muted {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.quota-reset {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.quota-reset b {
+  color: var(--ink-sub);
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 設定 */
+.settings {
+  display: grid;
+  max-width: 920px;
+}
+
+.setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 16px 32px;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--surface-2);
+}
+
+.setting-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.setting-text .muted {
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.setting-control {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-width: 0;
+}
+
+.path {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  overflow-wrap: anywhere;
+}
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.switch input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--pink);
+}
+
+@media (max-width: 600px) {
+  .plan-row,
+  .setting {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .commits li {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .commits li span.muted {
+    grid-column: 2;
+  }
+}

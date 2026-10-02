@@ -9,6 +9,7 @@ const system = require('./services/system');
 const { createNews } = require('./services/news');
 const { createGithub } = require('./services/github');
 const { createVault } = require('./services/vault');
+const { registerDevIpc } = require('./ipc-dev');
 
 const APP_ROOT = path.join(__dirname, '..');
 const SCHEME = 'app';
@@ -94,11 +95,12 @@ function handle(channel, fn) {
 
 function registerIpc() {
   const userData = app.getPath('userData');
+  let dev = null;
   const news = createNews({ fetch: net.fetch });
   const github = createGithub({
     fetch: net.fetch,
     dataDir: userData,
-    getToken: () => config.get('github')?.token ?? null,
+    getToken: () => dev?.getGithubToken() ?? config.get('github')?.token ?? null,
   });
   const vault = createVault({
     getConfig: () => config.get('vault'),
@@ -139,6 +141,8 @@ function registerIpc() {
   });
 
   handle('open-external', (url) => ({ ok: openExternal(String(url)) }));
+
+  dev = registerDevIpc({ handle, broadcast, openExternal, vault, fetch: net.fetch });
 }
 
 app.whenReady().then(() => {

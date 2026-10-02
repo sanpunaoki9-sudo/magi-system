@@ -51,11 +51,20 @@ function renderPlaceholder(body, tab) {
 
 export function createPanels({ layer, hub, modules = {} }) {
   let current = null;
+  let closing = null;
 
-  async function close() {
-    if (!current || current.closing) return;
-    const { panel, content, source, tab } = current;
+  function close() {
+    if (!current) return Promise.resolve();
+    // 閉じている途中なら、その完了を待つ
+    if (current.closing) return closing;
     current.closing = true;
+    closing = finishClose(current).finally(() => {
+      closing = null;
+    });
+    return closing;
+  }
+
+  async function finishClose({ panel, content, source, tab }) {
 
     hub.unfocus();
     document.getElementById('hub').classList.remove('is-focused');
@@ -67,12 +76,18 @@ export function createPanels({ layer, hub, modules = {} }) {
 
     source.classList.remove('is-source');
     panel.remove();
-    modules[tab.id]?.unmount?.();
     current = null;
+    try {
+      modules[tab.id]?.unmount?.();
+    } catch (err) {
+      console.error('[panel] 後片付けに失敗しました', err);
+    }
     source.focus({ preventScroll: true });
   }
 
   async function open(tab, source) {
+    // 前のパネルが閉じている途中なら、閉じ終わってから開く
+    if (current?.closing) await closing;
     if (current) return;
 
     const panel = document.createElement('section');

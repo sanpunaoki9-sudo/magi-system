@@ -1,7 +1,7 @@
 {
   "name": "oz-assistant",
   "productName": "OZ Assistant",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "OZ-style personal AI assistant for Windows",
   "main": "electron/main.js",
   "private": true,

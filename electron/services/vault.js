@@ -288,7 +288,7 @@ function createVault({ getConfig, setConfig }) {
     watcher = null;
   }
 
-  return { info, choose, graph, addNote, saveNews, obsidianUrl, watch, unwatch };
+  return { info, choose, graph, addNote, ensureHub, saveNews, obsidianUrl, watch, unwatch };
 }
 
 module.exports = { createVault, buildGraph, safeFileName };

@@ -1,3 +1,5 @@
+import { createAgentPreview } from './preview-agents.js';
+
 // ブラウザだけで画面を確認するときのサンプルデータ（Electron では使わない）。
 // どの応答にも preview: true を付け、画面に「サンプル」と表示させる。
 
@@ -128,6 +130,7 @@ export function createPreviewApi() {
   const listeners = new Set();
 
   return {
+    ...createAgentPreview(),
     system: { snapshot: createSystemSample() },
     news: {
       async list() {
