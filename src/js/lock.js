@@ -48,12 +48,10 @@ export function createLock({ onUnlock }) {
   const form = document.getElementById('lockForm');
   const message = document.getElementById('lockMessage');
   const password = document.getElementById('lockPassword');
-  const confirm = document.getElementById('lockConfirm');
-  const submit = form.querySelector('.lock-submit');
   const error = document.getElementById('lockError');
 
   let setupMode = false;
-  let busy = false;
+  let opening = false;
   let keyScale = 1;
 
   function layout() {
@@ -74,6 +72,10 @@ export function createLock({ onUnlock }) {
   }
 
   async function open() {
+    if (opening) return;
+    opening = true;
+    password.blur();
+    password.disabled = true;
     root.classList.add('is-opening');
     playClick();
 
@@ -99,35 +101,32 @@ export function createLock({ onUnlock }) {
     root.remove();
   }
 
+  // 正しいパスワードを打ち終えた瞬間に解錠する
+  password.addEventListener('input', async () => {
+    if (setupMode || opening) return;
+    error.textContent = '';
+    const typed = password.value;
+    if (!typed) return;
+    const { ok } = await oz.auth.verify(typed);
+    if (ok && password.value === typed) open();
+  });
+
+  // Enter: 初回はパスワードの決定、2回目以降は間違いの通知
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    if (busy) return;
-    busy = true;
-    error.textContent = '';
+    if (opening) return;
 
-    try {
-      if (setupMode) {
-        if (password.value !== confirm.value) {
-          shake('確認用のパスワードが一致しません');
-          return;
-        }
-        const result = await oz.auth.setPassword(password.value);
-        if (!result.ok) {
-          shake(result.reason ?? '設定できませんでした');
-          return;
-        }
-      } else {
-        const result = await oz.auth.verify(password.value);
-        if (!result.ok) {
-          shake('パスワードが違います');
-          return;
-        }
-      }
-      password.blur();
-      await open();
-    } finally {
-      busy = false;
+    if (setupMode) {
+      const result = await oz.auth.setPassword(password.value);
+      if (result.ok) open();
+      else shake(result.reason ?? '設定できませんでした');
+      return;
     }
+
+    const typed = password.value;
+    const { ok } = await oz.auth.verify(typed);
+    if (ok) open();
+    else if (password.value === typed) shake('パスワードが違います');
   });
 
   window.addEventListener('resize', layout);
@@ -138,9 +137,7 @@ export function createLock({ onUnlock }) {
       const { hasPassword } = await oz.auth.status();
       setupMode = !hasPassword;
       if (setupMode) {
-        message.textContent = '最初に起動パスワードを決めてください';
-        confirm.hidden = false;
-        submit.textContent = 'SET & UNLOCK';
+        message.textContent = '最初に起動パスワードを決めて Enter を押してください';
       }
       password.focus();
     },

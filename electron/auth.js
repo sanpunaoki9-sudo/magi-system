@@ -4,6 +4,9 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { promisify } = require('node:util');
+
+const scryptAsync = promisify(crypto.scrypt);
 
 const MIN_LENGTH = 4;
 let configPath = null;
@@ -47,11 +50,12 @@ function setPassword(password) {
   return { ok: true };
 }
 
-function verify(password) {
+// 入力のたびに呼ばれるので、メインプロセスを止めない非同期版を使う
+async function verify(password) {
   const { auth } = readConfig();
   if (!auth || typeof password !== 'string') return { ok: false };
   const expected = Buffer.from(auth.hash, 'hex');
-  const actual = hash(password, Buffer.from(auth.salt, 'hex'));
+  const actual = await scryptAsync(password, Buffer.from(auth.salt, 'hex'), 64);
   return { ok: crypto.timingSafeEqual(expected, actual) };
 }
 

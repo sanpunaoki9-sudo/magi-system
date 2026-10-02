@@ -42,7 +42,7 @@
 .lock-input {
   height: 48px;
   border: 1.5px solid var(--ink);
-  border-radius: 999px;
+  border-radius: 0;
   background: var(--surface);
   padding: 0 22px;
   font-size: 16px;
@@ -62,21 +62,6 @@
 
 .lock-input:focus {
   border-color: var(--pink);
-}
-
-.lock-submit {
-  height: 48px;
-  border-radius: 999px;
-  background: var(--ink);
-  color: var(--surface);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.3em;
-  transition: background-color 200ms var(--ease-out);
-}
-
-.lock-submit:hover {
-  background: var(--pink);
 }
 
 .lock-error {
