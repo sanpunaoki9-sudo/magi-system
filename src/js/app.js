@@ -3,6 +3,8 @@ import { startClock } from './clock.js';
 import { createLock } from './lock.js';
 import { createHub } from './hub/scene.js';
 import { createPanels } from './panel.js';
+import { createModules } from './modules/index.js';
+import { oz } from './bridge.js';
 
 // 解錠するまではハブを操作できないようにする
 const hubEl = document.getElementById('hub');
@@ -29,7 +31,7 @@ try {
     tabs: TABS,
     onSelect: (tab, el) => panels?.open(tab, el),
   });
-  panels = createPanels({ layer: document.getElementById('panelLayer'), hub });
+  panels = createPanels({ layer: document.getElementById('panelLayer'), hub, modules: createModules(oz) });
 } catch (err) {
   console.error('[hub] 3D 表示を初期化できませんでした', err);
 }

@@ -1,5 +1,6 @@
 // Electron の preload が公開する window.oz を返す。
-// ブラウザで画面だけ確認するとき（npm run dev:web）は localStorage を使う代替を返す。
+// ブラウザで画面だけ確認するとき（npm run dev:web）は、localStorage とサンプルデータを使う代替を返す。
+import { createPreviewApi } from './preview-data.js';
 
 function createBrowserMock() {
   const KEY = 'oz-dev-password';
@@ -16,6 +17,8 @@ function createBrowserMock() {
   };
 
   return {
+    preview: true,
+    ...createPreviewApi(),
     auth: {
       async status() {
         return { hasPassword: Boolean(read()) };

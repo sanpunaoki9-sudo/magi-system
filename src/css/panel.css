@@ -89,6 +89,8 @@
 }
 
 .panel-body {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
   flex: 1;
   min-height: 0;
   overflow: auto;

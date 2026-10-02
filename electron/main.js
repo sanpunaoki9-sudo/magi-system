@@ -1,9 +1,14 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, net, protocol } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
+const config = require('./config');
 const auth = require('./auth');
+const system = require('./services/system');
+const { createNews } = require('./services/news');
+const { createGithub } = require('./services/github');
+const { createVault } = require('./services/vault');
 
 const APP_ROOT = path.join(__dirname, '..');
 const SCHEME = 'app';
@@ -42,18 +47,102 @@ function createWindow() {
     },
   });
 
+  // ページ内のリンクはアプリの中では開かず、既定のブラウザに渡す
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!url.startsWith(`${SCHEME}://`)) {
+      event.preventDefault();
+      openExternal(url);
+    }
+  });
+
   win.once('ready-to-show', () => win.show());
   win.loadURL(`${SCHEME}://oz/src/index.html`);
 }
 
+// 外部で開いてよいのは Web ページと Obsidian だけ
+function openExternal(url) {
+  try {
+    const { protocol: scheme } = new URL(url);
+    if (scheme === 'https:' || scheme === 'http:' || scheme === 'obsidian:') {
+      shell.openExternal(url);
+      return true;
+    }
+  } catch {
+    // 不正なURLは開かない
+  }
+  return false;
+}
+
+function broadcast(channel, payload) {
+  for (const win of BrowserWindow.getAllWindows()) win.webContents.send(channel, payload);
+}
+
+// エラーは { error } として画面に返し、画面側でそのまま表示できるようにする
+function handle(channel, fn) {
+  ipcMain.handle(channel, async (event, ...args) => {
+    try {
+      return await fn(...args);
+    } catch (err) {
+      return { error: err?.message ?? String(err) };
+    }
+  });
+}
+
 function registerIpc() {
-  ipcMain.handle('auth:status', () => auth.status());
-  ipcMain.handle('auth:set', (_e, password) => auth.setPassword(password));
-  ipcMain.handle('auth:verify', (_e, password) => auth.verify(password));
+  const userData = app.getPath('userData');
+  const news = createNews({ fetch: net.fetch });
+  const github = createGithub({
+    fetch: net.fetch,
+    dataDir: userData,
+    getToken: () => config.get('github')?.token ?? null,
+  });
+  const vault = createVault({
+    getConfig: () => config.get('vault'),
+    setConfig: (value) => config.set('vault', value),
+  });
+  const watchVault = () => vault.watch(() => broadcast('vault:changed'));
+  watchVault();
+
+  handle('auth:status', () => auth.status());
+  handle('auth:set', (password) => auth.setPassword(password));
+  handle('auth:verify', (password) => auth.verify(password));
+
+  handle('system:snapshot', () => system.snapshot());
+
+  handle('news:list', (options) => news.list({ force: Boolean(options?.force) }));
+  handle('news:save', (item) => vault.saveNews(item));
+
+  handle('github:trending', (options) =>
+    github.trending({ since: options?.since, language: options?.language, force: Boolean(options?.force) }),
+  );
+  handle('github:top', (options) => github.top({ scope: options?.scope, force: Boolean(options?.force) }));
+  handle('github:growth', (options) => github.growth({ windowHours: options?.windowHours }));
+
+  handle('vault:info', () => vault.info());
+  handle('vault:graph', () => vault.graph());
+  handle('vault:add', (note) => vault.addNote(note));
+  handle('vault:open', (rel) => ({ ok: openExternal(vault.obsidianUrl(rel)) }));
+  handle('vault:choose', async () => {
+    const win = BrowserWindow.getFocusedWindow();
+    const result = await dialog.showOpenDialog(win, {
+      title: 'Obsidian の保管庫を選ぶ',
+      properties: ['openDirectory'],
+    });
+    if (result.canceled || !result.filePaths[0]) return vault.info();
+    const info = vault.choose(result.filePaths[0]);
+    watchVault();
+    return info;
+  });
+
+  handle('open-external', (url) => ({ ok: openExternal(String(url)) }));
 }
 
 app.whenReady().then(() => {
-  auth.init(app.getPath('userData'));
+  config.init(app.getPath('userData'));
   registerAppProtocol();
   registerIpc();
   createWindow();
