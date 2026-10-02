@@ -5,6 +5,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { createGlobe } from './globe.js';
+import { createOrbits } from './orbits.js';
 
 const FOV = 38;
 const GLOBE_RADIUS = 1.5;
@@ -21,15 +22,7 @@ const INTRO_PULLBACK = 1.45;
 const COLORS = {
   connector: 0xc4c4c4,
   pulse: 0xe0508c,
-  orbit: 0x5b86d6,
 };
-
-// 一番奥に置く青い軌道リング（タブや地球儀には重ならない奥行き）
-const ORBITS = [
-  { r: 13.5, squash: 0.42, x: -3.5, y: 1.2, z: -14, tilt: -0.32, speed: 0.012, opacity: 0.42 },
-  { r: 16, squash: 0.36, x: 4, y: -1.8, z: -16, tilt: 0.22, speed: -0.009, opacity: 0.32 },
-  { r: 11, squash: 0.5, x: 1.5, y: 3.2, z: -12, tilt: 0.55, speed: 0.015, opacity: 0.26 },
-];
 
 const damp = (rate, dt) => 1 - Math.exp(-rate * dt);
 
@@ -47,21 +40,6 @@ function createCircleSprite() {
   return texture;
 }
 
-function createOrbit({ r, squash, x, y, z, tilt, opacity }) {
-  const curve = new THREE.EllipseCurve(0, 0, r, r * squash, 0, Math.PI * 2);
-  const points = curve.getPoints(256).flatMap((p) => [p.x, p.y, 0]);
-  const geometry = new LineGeometry();
-  geometry.setPositions(points);
-  const line = new Line2(
-    geometry,
-    new LineMaterial({ color: COLORS.orbit, linewidth: 1.4, transparent: true, opacity, depthWrite: false }),
-  );
-  line.position.set(x, y, z);
-  line.rotation.z = tilt;
-  line.renderOrder = 0;
-  return line;
-}
-
 export function createHub({ canvas, tabLayer, tabs, onSelect }) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
   renderer.setClearColor(0x000000, 0);
@@ -75,12 +53,9 @@ export function createHub({ canvas, tabLayer, tabs, onSelect }) {
   sun.position.set(-5, 4, 6);
   scene.add(sun);
 
-  // 軌道リング
-  const orbits = ORBITS.map((spec) => {
-    const line = createOrbit(spec);
-    scene.add(line);
-    return { line, speed: spec.speed };
-  });
+  // 地球儀の後ろを回る軌道（中をコードが流れる）
+  const orbits = createOrbits({ center: GLOBE_CENTER, globeRadius: GLOBE_RADIUS });
+  scene.add(orbits.object);
 
   // 地球儀
   const globe = createGlobe({ radius: GLOBE_RADIUS, maxAnisotropy: renderer.capabilities.getMaxAnisotropy() });
@@ -170,9 +145,8 @@ export function createHub({ canvas, tabLayer, tabs, onSelect }) {
       view.targetDistance = view.revealed ? view.homeDistance : view.homeDistance * INTRO_PULLBACK;
     }
 
-    for (const line of [...orbits.map((o) => o.line), ...nodes.map((n) => n.connector)]) {
-      line.material.resolution.set(size.w, size.h);
-    }
+    orbits.setResolution(size.w, size.h);
+    for (const node of nodes) node.connector.material.resolution.set(size.w, size.h);
   }
 
   window.addEventListener('resize', resize);
@@ -248,7 +222,7 @@ export function createHub({ canvas, tabLayer, tabs, onSelect }) {
     const t = timer.getElapsed();
 
     globe.update(dt);
-    for (const { line, speed } of orbits) line.rotation.z += speed * dt;
+    orbits.update(dt);
 
     updateCamera(dt);
     updateTabs(t);
