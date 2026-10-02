@@ -9,7 +9,11 @@ import { createGlobe } from './globe.js';
 const FOV = 38;
 const GLOBE_RADIUS = 1.5;
 const GLOBE_CENTER = new THREE.Vector3(0, 0, -2);
-const RING = { rx: 4.6, ry: 2.55, depth: 1.2 };
+// 丸タブを並べる楕円。縦長の画面では縦向きの楕円にする
+const RINGS = {
+  landscape: { rx: 4.6, ry: 2.55, depth: 1.2 },
+  portrait: { rx: 2.3, ry: 4.4, depth: 0.6 },
+};
 const TAB_WORLD_SIZE = 1.18;
 const FIT_MARGIN = 0.75;
 const INTRO_PULLBACK = 1.45;
@@ -103,11 +107,7 @@ export function createHub({ canvas, tabLayer, tabs, onSelect }) {
 
   const nodes = tabs.map((tab, i) => {
     const angle = Math.PI / 2 - (i / tabs.length) * Math.PI * 2;
-    const home = new THREE.Vector3(
-      RING.rx * Math.cos(angle),
-      RING.ry * Math.sin(angle),
-      -RING.depth * Math.sin(angle),
-    );
+    const home = new THREE.Vector3();
 
     const el = document.createElement('button');
     el.type = 'button';
@@ -129,7 +129,7 @@ export function createHub({ canvas, tabLayer, tabs, onSelect }) {
     connector.renderOrder = 3;
     scene.add(connector);
 
-    return { tab, el, home, pos: home.clone(), connector, phase: i * 1.37, diameter: 0 };
+    return { tab, el, angle, home, pos: new THREE.Vector3(), connector, phase: i * 1.37, diameter: 0 };
   });
 
   // カメラ
@@ -153,10 +153,19 @@ export function createHub({ canvas, tabLayer, tabs, onSelect }) {
     camera.aspect = size.w / size.h;
     camera.updateProjectionMatrix();
 
+    const ring = camera.aspect < 1 ? RINGS.portrait : RINGS.landscape;
+    for (const node of nodes) {
+      node.home.set(
+        ring.rx * Math.cos(node.angle),
+        ring.ry * Math.sin(node.angle),
+        -ring.depth * Math.sin(node.angle),
+      );
+    }
+
     const tanHalf = Math.tan(THREE.MathUtils.degToRad(FOV / 2));
-    const needV = (RING.ry + FIT_MARGIN) / tanHalf;
-    const needH = (RING.rx + FIT_MARGIN) / (tanHalf * camera.aspect);
-    view.homeDistance = Math.max(needV, needH) + RING.depth;
+    const needV = (ring.ry + FIT_MARGIN) / tanHalf;
+    const needH = (ring.rx + FIT_MARGIN) / (tanHalf * camera.aspect);
+    view.homeDistance = Math.max(needV, needH) + ring.depth;
     if (!view.focused) {
       view.targetDistance = view.revealed ? view.homeDistance : view.homeDistance * INTRO_PULLBACK;
     }

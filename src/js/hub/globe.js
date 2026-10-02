@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { geoEquirectangular, geoPath } from 'd3-geo';
 import { feature } from 'topojson-client';
 
-const LAND_URL = '../node_modules/world-atlas/land-50m.json';
+// このファイルの場所から解決するので、ページの置き場所に左右されない
+const LAND_URL = new URL('../../../node_modules/world-atlas/land-50m.json', import.meta.url);
 const TEXTURE_WIDTH = 4096;
 const LAND_COLOR = '#e0508c';
 const JAPAN_LONGITUDE = 138;

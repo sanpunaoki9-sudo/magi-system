@@ -139,3 +139,26 @@
   border-radius: 999px;
   padding: 6px 14px;
 }
+
+@media (max-width: 600px) {
+  .panel-header {
+    padding: 18px 20px 14px;
+  }
+
+  .panel-title {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .panel-title-en {
+    font-size: 22px;
+  }
+
+  .panel-body {
+    padding: 20px 20px 28px;
+  }
+
+  .placeholder-summary {
+    font-size: 16px;
+  }
+}
