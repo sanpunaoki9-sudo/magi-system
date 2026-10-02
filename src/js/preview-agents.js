@@ -183,6 +183,9 @@ export function createAgentPreview() {
           gitUserEmail: '',
           autoMerge: true,
           githubToken: false,
+          background: true,
+          notifications: true,
+          openAtLogin: false,
           vault: { path: 'C:\\Users\\you\\Documents\\開発環境001', name: '開発環境001', expectedName: '開発環境001' },
           version: '0.3.0',
         };

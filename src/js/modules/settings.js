@@ -69,6 +69,17 @@ export function createSettingsModule(oz) {
           if (!r?.error) load();
         });
 
+        // オン・オフの切り替え。変えたらすぐ保存する
+        const toggle = (key, label, onText, offText) => {
+          const input = h('input', { type: 'checkbox', id: `set-${key}` });
+          input.checked = Boolean(s[key]);
+          input.addEventListener('change', async () => {
+            const r = await oz.settings.set({ [key]: input.checked });
+            say(r?.error ? r.error : input.checked ? onText : offText, r?.error ? 'error' : 'info');
+          });
+          return h('label', { class: 'switch', for: `set-${key}` }, input, h('span', {}, label));
+        };
+
         const vaultName = h('code', { class: 'path' }, s.vault?.path ?? `見つかりません（${s.vault?.expectedName ?? '開発環境001'}）`);
         const chooseVault = h('button', { type: 'button', class: 'btn' }, '選ぶ');
         chooseVault.addEventListener('click', async () => {
@@ -83,6 +94,10 @@ export function createSettingsModule(oz) {
             h('label', { class: 'switch', for: 'autoMerge' }, auto, h('span', {}, '自動で統合する'))),
           section('GitHub のトークン', 'GitHub ランキングの取得回数の上限を上げます。Windows の暗号化で保護して保存します。', token, h('div', { class: 'toolbar-group' }, saveToken, s.githubToken ? clearToken : null)),
           section('Obsidian の保管庫', 'グラフビューと作業ログの保存先です。', vaultName, h('div', { class: 'toolbar-group' }, chooseVault)),
+          section('アプリの動き', '閉じてもタスクトレイで動き続けると、利用枠の回復後の自動再開や作業中の依頼が止まりません。終了はタスクトレイのアイコンから行います。',
+            toggle('background', '閉じてもバックグラウンドで動かす', '閉じてもタスクトレイで動き続けます', '閉じると終了します'),
+            toggle('notifications', '作業の完了などを通知する', '通知を出します', '通知を出しません'),
+            toggle('openAtLogin', 'Windows の起動時に開く', 'Windows の起動時にタスクトレイで開きます', 'Windows の起動時には開きません')),
           section('バージョン', null, h('span', {}, `OZ Assistant ${s.version}`)),
         );
       }

@@ -1,7 +1,7 @@
 'use strict';
 
 // 段階3: エージェント・指令室・利用枠・Git・設定 の画面とのやりとり
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, Notification, dialog } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const config = require('./config');
@@ -50,14 +50,44 @@ function registerDevIpc({ handle, broadcast, openExternal, vault, news, speechMo
   const git = createGit({ getConfig: devConfig });
   const quota = createQuota();
   const agents = createAgents({ openExternal });
+  // 依頼の状態が変わったら Windows の通知で知らせる
+  const lastStatus = new Map();
+  const NOTIFY = {
+    done: (j, name) => [`${name} の作業が終わりました`, j.title],
+    failed: (j, name) => [`${name} の作業が失敗しました`, j.title],
+    'waiting-quota': (j, name) => [`${name} が利用枠の上限です`, j.resumeAt ? `${new Date(j.resumeAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}ごろ自動で再開します` : '回復したら自動で再開します'],
+    'handed-off': (j, name) => [`${name} で作業場所を開きました`, '終わったら「完了にする」を押してください'],
+  };
+  function notifyJob(job) {
+    const prev = lastStatus.get(job.id);
+    lastStatus.set(job.id, job.status);
+    if (prev === job.status || !NOTIFY[job.status] || !Notification.isSupported()) return;
+    if (config.get('app')?.notifications === false) return;
+    const [title, body] = NOTIFY[job.status](job, agents.byId(job.agentId)?.name ?? job.agentId);
+    new Notification({ title, body, silent: false }).show();
+  }
+  const NOTIFY_GROUP = {
+    merged: '分担した作業をまとめました',
+    conflict: '分担した作業の統合で衝突が残りました',
+    failed: '分担した作業の統合に失敗しました',
+  };
+
   const runner = createRunner({
     agents,
     git,
     quota,
     vault,
     dataDir: userData,
-    onJob: (job) => broadcast('jobs:update', job),
-    onGroup: (group) => broadcast('groups:update', group),
+    onJob: (job) => {
+      broadcast('jobs:update', job);
+      notifyJob(job);
+    },
+    onGroup: (group) => {
+      broadcast('groups:update', group);
+      if (NOTIFY_GROUP[group.status] && Notification.isSupported() && config.get('app')?.notifications !== false) {
+        new Notification({ title: NOTIFY_GROUP[group.status], body: group.request }).show();
+      }
+    },
   });
   const planner = createPlanner({ agents, quota, git });
 
@@ -167,6 +197,9 @@ function registerDevIpc({ handle, broadcast, openExternal, vault, news, speechMo
       gitUserEmail: dev.gitUserEmail ?? '',
       autoMerge: dev.autoMerge !== false,
       githubToken: secrets.hasSecret('githubToken'),
+      background: config.get('app')?.background !== false,
+      notifications: config.get('app')?.notifications !== false,
+      openAtLogin: Boolean(config.get('app')?.openAtLogin),
       vault: vault.info(),
       version: app.getVersion(),
     };
@@ -179,6 +212,14 @@ function registerDevIpc({ handle, broadcast, openExternal, vault, news, speechMo
     if (typeof patch.autoMerge === 'boolean') dev.autoMerge = patch.autoMerge;
     config.set('dev', dev);
     if (typeof patch.githubToken === 'string') secrets.setSecret('githubToken', patch.githubToken.trim());
+    const appSettings = config.get('app') ?? {};
+    for (const key of ['background', 'notifications', 'openAtLogin']) {
+      if (typeof patch[key] === 'boolean') appSettings[key] = patch[key];
+    }
+    config.set('app', appSettings);
+    if (typeof patch.openAtLogin === 'boolean' && app.isPackaged) {
+      app.setLoginItemSettings({ openAtLogin: patch.openAtLogin, args: ['--hidden'] });
+    }
     if (patch.gitUserName !== undefined || patch.gitUserEmail !== undefined) {
       await git.ensureRepo({ userName: dev.gitUserName || undefined, userEmail: dev.gitUserEmail || undefined }).catch(() => null);
     }

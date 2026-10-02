@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, dialog, ipcMain, net, protocol, session, shell } = require('electron');
+const { app, BrowserWindow, Menu, Tray, dialog, ipcMain, nativeImage, net, protocol, session, shell } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const config = require('./config');
@@ -15,6 +15,11 @@ const { createSpeechModels } = require('./services/speech-models');
 const APP_ROOT = path.join(__dirname, '..');
 const SCHEME = 'app';
 let speechModels = null;
+let mainWindow = null;
+let tray = null;
+let quitting = false;
+const ICON = path.join(APP_ROOT, 'src', 'assets', 'icon-256.png');
+const TRAY_ICON = path.join(APP_ROOT, 'src', 'assets', 'tray.png');
 
 // SharedArrayBuffer（音声認識を複数スレッドで動かすのに必要）を使えるようにする見出し
 const ISOLATION_HEADERS = {
@@ -52,8 +57,33 @@ function registerAppProtocol() {
   });
 }
 
-function createWindow() {
+// 閉じてもバックグラウンドで動かすか（利用枠の回復後の自動再開や、作業中の依頼を止めないため）
+const keepInBackground = () => config.get('app')?.background !== false;
+
+function showWindow() {
+  if (!mainWindow) {
+    createWindow({ show: true });
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+}
+
+function createTray() {
+  tray = new Tray(nativeImage.createFromPath(TRAY_ICON));
+  tray.setToolTip('OZ Assistant');
+  tray.setContextMenu(Menu.buildFromTemplate([
+    { label: 'OZ Assistant を開く', click: showWindow },
+    { type: 'separator' },
+    { label: '終了', click: () => { quitting = true; app.quit(); } },
+  ]));
+  tray.on('click', showWindow);
+}
+
+function createWindow({ show = true } = {}) {
   const win = new BrowserWindow({
+    icon: ICON,
     width: 1440,
     height: 900,
     minWidth: 1024,
@@ -82,7 +112,18 @@ function createWindow() {
     }
   });
 
-  win.once('ready-to-show', () => win.show());
+  // 閉じるボタンでは終了せず、タスクトレイに隠れる（終了はトレイのメニューから）
+  win.on('close', (event) => {
+    if (quitting || !keepInBackground()) return;
+    event.preventDefault();
+    win.hide();
+  });
+  win.on('closed', () => {
+    mainWindow = null;
+  });
+
+  mainWindow = win;
+  if (show) win.once('ready-to-show', () => win.show());
   win.loadURL(`${SCHEME}://oz/src/index.html`);
 }
 
@@ -90,7 +131,7 @@ function createWindow() {
 function openExternal(url) {
   try {
     const { protocol: scheme } = new URL(url);
-    if (scheme === 'https:' || scheme === 'http:' || scheme === 'obsidian:') {
+    if (scheme === 'https:' || scheme === 'http:' || scheme === 'obsidian:' || url.startsWith('vscode://file/')) {
       shell.openExternal(url);
       return true;
     }
@@ -177,7 +218,19 @@ function registerPermissions() {
   session.defaultSession.setPermissionCheckHandler((wc, permission, origin) => allowed.has(permission) && fromApp(`${origin}/`));
 }
 
+// 2つ目を起動したら、先に動いている方の画面を出す（依頼が二重に動かないように）
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', showWindow);
+}
+
+app.on('before-quit', () => {
+  quitting = true;
+});
+
 app.whenReady().then(() => {
+  if (process.platform === 'win32') app.setAppUserModelId('com.oz.assistant');
   config.init(app.getPath('userData'));
   speechModels = createSpeechModels({
     fetch: net.fetch,
@@ -187,11 +240,11 @@ app.whenReady().then(() => {
   registerPermissions();
   registerAppProtocol();
   registerIpc();
-  createWindow();
+  createTray();
+  // Windows の起動時に開いたとき（--hidden）は、トレイにだけ置く
+  createWindow({ show: !process.argv.includes('--hidden') });
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
+  app.on('activate', showWindow);
 });
 
 app.on('window-all-closed', () => {

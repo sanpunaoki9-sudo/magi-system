@@ -1,35 +1,16 @@
 {
   "name": "oz-assistant",
   "productName": "OZ Assistant",
-  "version": "0.4.0",
+  "version": "1.0.0",
   "description": "OZ-style personal AI assistant for Windows",
   "main": "electron/main.js",
   "private": true,
   "scripts": {
     "start": "electron .",
     "dev:web": "node scripts/dev-server.mjs",
-    "dist": "electron-builder --win"
-  },
-  "build": {
-    "appId": "com.oz.assistant",
-    "productName": "OZ Assistant",
-    "files": [
-      "electron/**",
-      "src/**",
-      "node_modules/**",
-      "stubs/**",
-      "package.json"
-    ],
-    "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ]
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
+    "dist": "electron-builder --config electron-builder.config.cjs --win --x64",
+    "dist:dir": "electron-builder --config electron-builder.config.cjs --dir",
+    "test": "node --test \"tests/**/*.test.js\""
   },
   "dependencies": {
     "3d-force-graph": "^1.80.1",
@@ -49,5 +30,9 @@
   },
   "overrides": {
     "onnxruntime-node": "$onnxruntime-node"
-  }
+  },
+  "author": {
+    "name": "OZ Assistant"
+  },
+  "homepage": "https://github.com/sanpunaoki9-sudo/magi-system"
 }

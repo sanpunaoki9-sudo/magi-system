@@ -1,0 +1,59 @@
+name: Build
+
+# テストを通してから、Windows 用のインストーラ（.exe）とポータブル版を作る。
+# 出来上がった .exe は、この実行結果の「Artifacts」からダウンロードできる。
+# v から始まるタグ（例: v1.0.0）を付けると、GitHub の Releases にも置く。
+on:
+  push:
+    branches: [main, 'claude/**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - name: Test
+        run: npm test
+
+  windows:
+    needs: test
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Build installer and portable exe
+        run: npx electron-builder --config electron-builder.config.cjs --win --x64 --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: OZ-Assistant-Windows
+          path: dist/*.exe
+          if-no-files-found: error
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.exe

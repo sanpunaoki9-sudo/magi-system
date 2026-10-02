@@ -4,13 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- importmap の内容を変えたら sha256 も更新する: node scripts/csp-hash.mjs -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-6rX/ghiU0wmIob37XNe4rz0/rjj55ElUvVeEEDziyHU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; media-src 'self' blob:">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-gRzpck5cuIHCZ8iFRsl6gPHJIfiSzrQNOfMLK3yQx8w='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self' blob:; media-src 'self' blob:">
   <title>OZ Assistant</title>
   <script type="importmap">
   {
     "imports": {
       "three": "../node_modules/three/build/three.module.js",
-      "three/addons/": "../node_modules/three/examples/jsm/",
+      "three/addons/": "./vendor/three-addons/",
       "d3-geo": "../node_modules/d3-geo/src/index.js",
       "d3-array": "../node_modules/d3-array/src/index.js",
       "internmap": "../node_modules/internmap/src/index.js",

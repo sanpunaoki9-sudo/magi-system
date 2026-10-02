@@ -2,31 +2,47 @@
 
 映画『サマーウォーズ』の OZ をモチーフにした、Windows 向けの AI アシスタントアプリです。
 
-## 必要なもの
+## インストール
 
-- Windows 10 / 11
-- [Node.js](https://nodejs.org/) 20 以上
-- Git
+### いちばん簡単な方法（.exe をダウンロード）
 
-## 起動のしかた
+1. GitHub のこのリポジトリの **Actions** タブ → 一番上の「Build」の実行結果を開く
+2. 下の **Artifacts** にある `OZ-Assistant-Windows` をダウンロードして展開する
+3. `OZ-Assistant-Setup-x.x.x.exe`（インストーラ）を実行する。インストールせずに使うなら `OZ-Assistant-x.x.x-portable.exe`
+
+※ コード署名をしていないため、初回は Windows SmartScreen の警告が出ます。「詳細情報」→「実行」で起動できます。
+※ `v1.0.0` のようなタグを付けると、Releases にも .exe が置かれます。
+
+### 自分で動かす・作る
+
+必要なもの: Windows 10 / 11、[Node.js](https://nodejs.org/) 20 以上、[Git](https://git-scm.com/)
 
 ```powershell
 git clone https://github.com/sanpunaoki9-sudo/magi-system.git
 cd magi-system
 git checkout claude/jarvis-assistant-app-3dhco3
 npm install
-npm start
+npm start          # そのまま起動
+npm run dist       # dist\ にインストーラ版とポータブル版の .exe を作る
+npm test           # テスト
 ```
 
-最初の起動では、起動パスワードを決める画面が出ます。次からは、そのパスワードで解錠します。
+## はじめて使うとき
 
-## .exe を作る
+1. 起動パスワードを決めて Enter（次からはそのパスワードで解錠）
+2. **SETTINGS** で Git の名前とメールアドレスを保存（作業フォルダは `ドキュメント\OZ-Workspace` が自動で作られます）
+3. **LAUNCH** で Claude Code / Codex の「インストール」と「VS Code 拡張を追加」を押す。Antigravity は「ダウンロードページ」から入れる
+   - Claude Code と Codex は、初回だけターミナルで `claude` / `codex` を起動してログインしておいてください
+4. **TALK** の「音声の設定」で音声認識のモデルをダウンロード（初回だけ）
+5. **GRAPH** で Obsidian の保管庫「開発環境001」が表示されることを確認（見つからなければ「保管庫を選ぶ」）
 
-```powershell
-npm run dist
-```
+あとは **COMMAND** から依頼するか、**TALK** で「Codex に〜を頼んで」「分担して〜」と話しかけます。
 
-`dist/` にインストーラ版とポータブル版ができます。
+### 閉じても動き続ける
+
+閉じるボタンを押しても終了せず、タスクトレイで動き続けます（利用枠の回復後の自動再開や、作業中の依頼を止めないため）。
+終了はタスクトレイのアイコンを右クリック →「終了」。作業の完了や利用枠の上限は Windows の通知で知らせます。
+設定で「Windows の起動時に開く」をオンにすると、起動時からタスクトレイで待機します。
 
 ## 画面だけをブラウザで確認する
 
@@ -34,8 +50,7 @@ npm run dist
 npm run dev:web
 ```
 
-表示された URL（`http://localhost:5173/src/index.html`）をブラウザで開きます。
-ブラウザ版では、パスワードはブラウザの中にだけ保存されます。
+表示された URL（`http://localhost:5173/src/index.html`）をブラウザで開きます。サンプルデータで画面を確認できます。
 
 ## 機能
 
@@ -106,6 +121,10 @@ GitHub の総スターは、ログインなしだと1時間あたりの取得回
 | `electron/services/talk.js` | 話しかけモードの頭脳（依頼・分担・ニュースなどの聞き分けと会話） |
 | `electron/services/speech-models.js` | 音声認識モデルのダウンロード |
 | `src/js/speech/` | マイク・話している区間の判定・Whisper・読み上げ |
+| `src/vendor/three-addons/` | three.js の線の描画（electron-builder が examples フォルダを同梱しないため） |
+| `electron-builder.config.cjs` | .exe の作り方（同梱するファイルの絞り込み・安全設定） |
+| `.github/workflows/build.yml` | テストと Windows 用 .exe の自動ビルド |
+| `tests/` | 自動テスト（`npm test`） |
 | `stubs/onnxruntime-node` | 使わないネイティブ版の代わりの空パッケージ（インストールを軽くするため） |
 | `src/index.html` | 画面 |
 | `src/js/lock.js` | 起動画面（鍵穴） |
@@ -123,4 +142,4 @@ GitHub の総スターは、ログインなしだと1時間あたりの取得回
 - [x] 段階2: PCの状態・AIニュース・GitHubランキング・グラフビュー
 - [x] 段階3: AGENTS（単体起動・指令室・状態・利用枠・VS Code / Git 連携）・設定
 - [x] 段階4: 話しかけモード
-- [ ] 段階5: .exe の仕上げ
+- [x] 段階5: .exe の仕上げ（アイコン・タスクトレイ・通知・自動起動・二重起動の防止・同梱ファイルの削減・Electron の安全設定・GitHub での自動ビルド）
