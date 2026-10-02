@@ -198,7 +198,7 @@ function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, spaw
       shell: inv.shell,
       windowsHide: true,
       detached: process.platform !== 'win32',
-      env: { ...process.env, OZ_ASSISTANT: '1' },
+      env: inv.env ?? { ...process.env, OZ_ASSISTANT: '1' },
     });
     processes.set(job.id, child);
     log(job, `${agent.name} が作業を始めました（${wt.branch}）`);

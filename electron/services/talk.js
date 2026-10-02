@@ -80,7 +80,7 @@ function createTalk({ agents, quota, runner, planner, news, system, vault, dataD
     const inv = await agents.invocation(agentId, { mode: 'chat', prompt: input, cwd });
     if (!inv) return { ok: false, out: '', err: '見つかりません' };
     return new Promise((resolve) => {
-      const child = spawnImpl(inv.command, inv.args, { cwd, shell: inv.shell, windowsHide: true });
+      const child = spawnImpl(inv.command, inv.args, { cwd, shell: inv.shell, env: inv.env, windowsHide: true });
       let out = '';
       let err = '';
       const timer = setTimeout(() => child.kill(), TIMEOUT_MS);

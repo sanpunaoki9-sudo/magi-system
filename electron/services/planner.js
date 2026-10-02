@@ -76,7 +76,7 @@ function createPlanner({ agents, quota, git, spawnImpl = spawn }) {
       return { source: 'fallback', reason: 'Claude Code が見つからないため、簡単な分担にしました', assignments: fallbackPlan(text, available) };
     }
     const output = await new Promise((resolve) => {
-      const child = spawnImpl(inv.command, inv.args, { cwd, shell: inv.shell, windowsHide: true });
+      const child = spawnImpl(inv.command, inv.args, { cwd, shell: inv.shell, env: inv.env, windowsHide: true });
       let out = '';
       const timer = setTimeout(() => child.kill(), TIMEOUT_MS);
       child.stdout?.on('data', (d) => { out += d; });

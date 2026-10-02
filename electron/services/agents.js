@@ -23,6 +23,9 @@ const TASK_FILE = 'OZ_TASK.md';
 
 const winget = (name) => path.join(LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links', name);
 
+// エディタの拡張機能フォルダ（VS Code の拡張には CLI 本体が同梱されている）
+const EXTENSION_ROOTS = ['.vscode', '.vscode-insiders', '.cursor', '.windsurf', '.antigravity'].map((d) => path.join(HOME, d, 'extensions'));
+
 const AGENTS = [
   {
     id: 'claude-code',
@@ -39,6 +42,13 @@ const AGENTS = [
       plan: ['-p', '--output-format', 'text'],
       chat: ['-p', '--output-format', 'text'],
     },
+    // VS Code 拡張と Claude デスクトップアプリに同梱されている本体も使える
+    bundled: [
+      { label: 'VS Code 拡張に同梱', extension: 'anthropic.claude-code' },
+      { label: 'Claude アプリに同梱', root: path.join(IS_WIN ? APPDATA : process.platform === 'darwin' ? path.join(HOME, 'Library', 'Application Support') : path.join(HOME, '.config'), 'Claude', 'claude-code') },
+    ],
+    // WSL（Linux）側に入れている場合も使う
+    wsl: true,
     npmPackage: '@anthropic-ai/claude-code',
     vscodeExtension: 'anthropic.claude-code',
     installUrl: 'https://docs.claude.com/en/docs/claude-code/setup',
@@ -59,6 +69,8 @@ const AGENTS = [
       plan: ['exec', '--skip-git-repo-check', '-'],
       chat: ['exec', '--skip-git-repo-check', '-'],
     },
+    bundled: [{ label: 'VS Code 拡張に同梱', extension: 'openai.chatgpt' }],
+    wsl: true,
     npmPackage: '@openai/codex',
     vscodeExtension: 'openai.chatgpt',
     installUrl: 'https://developers.openai.com/codex/cli',
@@ -109,26 +121,171 @@ const exists = (p) => {
 };
 const needsShell = (p) => IS_WIN && /\.(cmd|bat)$/i.test(p);
 
+const execText = (file, args, opts = {}) =>
+  new Promise((resolve) => {
+    execFile(file, args, { windowsHide: true, timeout: 8000, ...opts }, (err, stdout) => resolve(err ? null : String(stdout)));
+  });
+
+// Windows では、アプリを起動した後に入れたものも見えるように、レジストリに保存された最新の PATH を足す
+// （エクスプローラーから起動したアプリは、ログイン時点の古い PATH を持っているため）
+let registryPath = null;
+let envCache = null;
+async function agentEnv() {
+  const env = { ...process.env };
+  if (IS_WIN) {
+    if (!registryPath) {
+      registryPath = [];
+      for (const key of ['HKCU\\Environment', 'HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment']) {
+        const out = await execText('reg', ['query', key, '/v', 'Path']);
+        const m = out?.match(/Path\s+REG_(?:EXPAND_)?SZ\s+(.*)/i);
+        if (m) registryPath.push(...m[1].trim().split(';'));
+      }
+    }
+    const expand = (p) => p.replace(/%([^%]+)%/g, (all, name) => process.env[name] ?? all);
+    const current = Object.keys(env).find((k) => /^path$/i.test(k));
+    const merged = [...(env[current] ?? '').split(';'), ...registryPath.map(expand)].map((p) => p.trim()).filter(Boolean);
+    for (const k of Object.keys(env)) if (/^path$/i.test(k)) delete env[k];
+    env.Path = [...new Set(merged)].join(';');
+  }
+  envCache = env;
+  return env;
+}
+
 // PATH の中から探す。Windows では .exe を優先し、拡張子のないファイル（bash 用）は使わない
-function which(command) {
-  return new Promise((resolve) => {
-    execFile(IS_WIN ? 'where' : 'which', [command], { windowsHide: true, timeout: 8000 }, (err, stdout) => {
-      if (err) return resolve(null);
-      const found = String(stdout).split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-      if (!IS_WIN) return resolve(found[0] ?? null);
-      resolve(found.find((p) => /\.exe$/i.test(p)) ?? found.find((p) => /\.(cmd|bat)$/i.test(p)) ?? null);
-    });
+async function whichAll(command) {
+  const out = await execText(IS_WIN ? 'where' : 'which', [command], { env: await agentEnv() });
+  const found = String(out ?? '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  if (!IS_WIN) return found.slice(0, 1);
+  return [...found.filter((p) => /\.exe$/i.test(p)), ...found.filter((p) => /\.(cmd|bat)$/i.test(p))];
+}
+const which = async (command) => (await whichAll(command))[0] ?? null;
+
+// npm のグローバルの置き場所（設定で変えている人もいる）。1回だけ調べる
+let npmPrefix;
+async function getNpmPrefix() {
+  if (npmPrefix !== undefined) return npmPrefix;
+  npmPrefix = null;
+  const npm = await which('npm');
+  if (npm) {
+    const res = await runFixed(npm, ['config', 'get', 'prefix'], { timeout: 15000 });
+    if (res.ok && res.output) npmPrefix = res.output.split(/\r?\n/).pop().trim();
+  }
+  return npmPrefix;
+}
+
+// Node.js のバージョン管理ツールやパッケージ管理ツールが CLI を置く場所（Windows）
+async function commonDirs() {
+  if (!IS_WIN) return [];
+  const prefix = await getNpmPrefix();
+  return [
+    path.join(HOME, '.local', 'bin'),
+    path.join(APPDATA, 'npm'),
+    prefix,
+    process.env.NVM_SYMLINK,
+    path.join(PROGRAM_FILES, 'nodejs'),
+    path.join(LOCALAPPDATA, 'Volta', 'bin'),
+    path.join(HOME, 'scoop', 'shims'),
+    path.join(LOCALAPPDATA, 'pnpm'),
+    path.join(HOME, '.bun', 'bin'),
+    path.join(LOCALAPPDATA, 'Yarn', 'bin'),
+    path.join(LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links'),
+  ].filter(Boolean);
+}
+
+// フォルダの中から浅い順にファイルを探す（深さに上限をつける）
+function findFile(root, fileName, maxDepth = 5) {
+  let level = [root];
+  for (let depth = 0; depth <= maxDepth && level.length; depth++) {
+    const next = [];
+    for (const dir of level) {
+      let entries;
+      try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      const hit = entries.find((e) => e.isFile() && e.name.toLowerCase() === fileName.toLowerCase());
+      if (hit) return path.join(dir, hit.name);
+      for (const e of entries) if (e.isDirectory()) next.push(path.join(dir, e.name));
+    }
+    level = next;
+  }
+  return null;
+}
+
+// 新しい順に並べたサブフォルダ
+function newestDirs(root, prefix = '') {
+  try {
+    return fs.readdirSync(root, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && e.name.toLowerCase().startsWith(prefix))
+      .map((e) => path.join(root, e.name))
+      .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+  } catch {
+    return [];
+  }
+}
+
+// エディタの拡張機能やアプリに同梱されている本体を探す
+function bundledPaths(names, bundled = []) {
+  const files = names.map((n) => (IS_WIN ? `${n}.exe` : n));
+  const found = [];
+  for (const b of bundled) {
+    const dirs = b.extension
+      ? EXTENSION_ROOTS.flatMap((root) => newestDirs(root, `${b.extension.toLowerCase()}-`))
+      : newestDirs(b.root);
+    for (const dir of dirs) {
+      for (const file of files) {
+        const p = findFile(dir, file);
+        if (p) found.push({ path: p, source: b.label });
+      }
+    }
+  }
+  return found;
+}
+
+// 探す順: PATH → よくあるインストール先 → 同梱の本体
+async function candidates({ names = [], paths = [], bundled }) {
+  const list = [];
+  for (const name of names) for (const p of await whichAll(name)) list.push({ path: p, source: 'PATH' });
+  for (const p of paths) list.push({ path: p, source: 'インストール先' });
+  for (const dir of await commonDirs()) {
+    for (const name of names) for (const ext of ['.exe', '.cmd']) list.push({ path: path.join(dir, name + ext), source: 'インストール先' });
+  }
+  list.push(...bundledPaths(names, bundled));
+  const seen = new Set();
+  return list.filter((c) => {
+    const key = path.resolve(c.path).toLowerCase();
+    if (seen.has(key) || !exists(c.path)) return false;
+    seen.add(key);
+    return true;
   });
 }
 
-// PATH → よくあるインストール先 の順に探す
-async function locate({ names, paths }) {
-  for (const name of names ?? []) {
-    const found = await which(name);
-    if (found) return { path: found, source: 'PATH' };
+// 見つかったもののうち、実際に動くもの（--version が通るもの）を選ぶ。どれも通らなければ最初のもの
+async function locate(spec, { checkVersion = false } = {}) {
+  const list = await candidates(spec);
+  if (!checkVersion) return list[0] ?? null;
+  for (const c of list.slice(0, 4)) {
+    const res = await runFixed(c.path, ['--version'], { timeout: 15000 });
+    if (res.ok) return { ...c, version: res.output.split('\n')[0].slice(0, 60) };
   }
-  const known = (paths ?? []).find(exists);
-  return known ? { path: known, source: 'インストール先' } : null;
+  return list[0] ? { ...list[0], version: null } : null;
+}
+
+// WSL（Windows の中の Linux）に入れている場合。ログイン時の設定（nvm など）を読むため bash -lic で動かす
+const WSL_EXE = path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'wsl.exe');
+async function locateWsl(names) {
+  if (!IS_WIN || !exists(WSL_EXE)) return null;
+  for (const name of names) {
+    const res = await runFixed(WSL_EXE, ['-e', 'bash', '-lic', `command -v ${name} && ${name} --version`], { timeout: 30000 });
+    const lines = res.output.split(/\r?\n/).map((s) => s.trim());
+    const at = lines.find((l) => l.startsWith('/'));
+    if (res.ok && at) {
+      const version = lines[lines.indexOf(at) + 1]?.slice(0, 60) || null;
+      return { path: `WSL: ${at}`, source: 'WSL', wsl: true, command: name, version };
+    }
+  }
+  return null;
 }
 
 // コマンドを起動する形に整える。シェル経由のときはパスを引用符で囲む（Windows のパスに " は使えない）
@@ -138,10 +295,11 @@ function spawnTarget(file) {
 }
 
 // 固定の引数でコマンドを実行する（利用者の文字列は渡さない）
-function runFixed(file, args, { cwd, timeout = 120000 } = {}) {
+async function runFixed(file, args, { cwd, timeout = 120000 } = {}) {
+  const env = await agentEnv();
   return new Promise((resolve) => {
     const { command, shell } = spawnTarget(file);
-    const child = spawn(command, args, { cwd, shell, windowsHide: true });
+    const child = spawn(command, args, { cwd, shell, env, windowsHide: true });
     // 入力を待つコマンドで止まらないように、標準入力はすぐ閉じる
     child.stdin.on('error', () => {});
     child.stdin.end();
@@ -179,20 +337,16 @@ function createAgents({ openExternal }) {
 
     const agents = await Promise.all(
       AGENTS.map(async (agent) => {
-        const cli = await locate(agent);
+        let cli = await locate(agent, { checkVersion: true });
+        if (!cli && agent.wsl) cli = await locateWsl(agent.names);
         const ide = agent.ide ? await locate(agent.ide) : null;
-        let version = null;
-        let help = '';
-        if (cli) {
-          const res = await runFixed(cli.path, ['--version'], { timeout: 15000 });
-          version = res.ok ? res.output.split('\n')[0].slice(0, 60) : null;
-          // 自動承認の旗が使えるかは、その版の --help で確かめる
-          if (agent.taskFlags) help = (await runFixed(cli.path, ['--help'], { timeout: 15000 })).output;
-        }
+        const version = cli?.version ?? null;
+        // 自動承認の旗が使えるかは、その版の --help で確かめる
+        const help = cli && agent.taskFlags ? (await runFixed(cli.path, ['--help'], { timeout: 15000 })).output : '';
         return {
           id: agent.id,
           installed: Boolean(cli || ide),
-          cli: cli ? { ...cli, version } : null,
+          cli,
           ide: ide ?? null,
           // 依頼を自動で実行できるか（CLI があるか）
           headless: Boolean(cli),
@@ -229,11 +383,18 @@ function createAgents({ openExternal }) {
     const agent = byId(agentId);
     const info = await found(agentId);
     if (!agent || !info?.cli) return null;
-    const { command, shell } = spawnTarget(info.cli.path);
+    const env = { ...(await agentEnv()), OZ_ASSISTANT: '1' };
     const text = String(prompt ?? '');
+    const args = agent.args?.[mode] ?? agent.args?.task;
 
+    // WSL 側の CLI: 引数は固定の文字列だけを並べる（依頼文は標準入力）。作業フォルダは /mnt/c/... として引き継がれる
+    if (info.cli.wsl) {
+      return { command: WSL_EXE, args: ['-e', 'bash', '-lic', [info.cli.command, ...args].join(' ')], shell: false, stdin: text, env };
+    }
+
+    const { command, shell } = spawnTarget(info.cli.path);
     if (agent.args) {
-      return { command, args: agent.args[mode] ?? agent.args.task, shell, stdin: text };
+      return { command, args, shell, stdin: text, env };
     }
 
     // agy: 依頼文は引数で渡す。シェル経由になるとき・長すぎるときは、作業フォルダのファイルに書いて読ませる
@@ -244,7 +405,7 @@ function createAgents({ openExternal }) {
       promptText = `このフォルダの ${TASK_FILE} に書かれた依頼を実行してください。終わったら ${TASK_FILE} は消してください。`;
     }
     const flags = mode === 'task' ? info.taskFlags : [];
-    return { command, args: [agent.promptArg, promptText, ...flags], shell, stdin: '' };
+    return { command, args: [agent.promptArg, promptText, ...flags], shell, stdin: '', env };
   }
 
   // VS Code でフォルダを開く
@@ -259,11 +420,13 @@ function createAgents({ openExternal }) {
   }
 
   // 新しいターミナルを開いて、対話モードでエージェントを動かす
-  function openTerminal(agent, file, dir) {
+  function openTerminal(agent, cli, dir) {
+    const file = cli.path;
     if (IS_WIN) {
-      // パスはどちらも引用符で囲む（Windows のパスに " は使えない）
-      const line = `/d /s /c start "OZ ${agent.name}" /D "${dir}" cmd /k "${file}"`;
-      spawn(process.env.ComSpec ?? 'cmd.exe', [line], { detached: true, stdio: 'ignore', windowsVerbatimArguments: true }).unref();
+      // パスはどちらも引用符で囲む（Windows のパスに " は使えない）。WSL 側のものは wsl.exe 経由で動かす
+      const run = cli.wsl ? `wsl.exe -e bash -lic ${cli.command}` : `"${file}"`;
+      const line = `/d /s /c start "OZ ${agent.name}" /D "${dir}" cmd /k ${run}`;
+      spawn(process.env.ComSpec ?? 'cmd.exe', [line], { detached: true, stdio: 'ignore', windowsVerbatimArguments: true, env: envCache ?? process.env }).unref();
       return true;
     }
     if (process.platform === 'darwin') {
@@ -296,7 +459,7 @@ function createAgents({ openExternal }) {
       opened.push('VS Code');
     }
     if (info.cli) {
-      openTerminal(agent, info.cli.path, dir);
+      openTerminal(agent, info.cli, dir);
       opened.push(`${agent.name}（ターミナル）`);
     }
     return { opened };

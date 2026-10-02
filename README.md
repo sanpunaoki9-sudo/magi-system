@@ -70,7 +70,11 @@ npm run dev:web
 ### エージェントの動かし方
 
 - 作業フォルダ（初期値は `ドキュメント\OZ-Workspace`）を Git で管理し、エージェントごとに専用ブランチ `oz/<名前>` と専用の作業場所 `.oz-worktrees/<名前>` を作ります。同時に作業してもぶつかりません。
-- エージェントは PATH と、いつものインストール先（`~\.local\bin`、`%APPDATA%\npm`、`%LOCALAPPDATA%\agy\bin`、`%LOCALAPPDATA%\Programs\Antigravity` など）の両方から探します。PATH に入っていなくても見つかります。
+- エージェントの CLI は次の順に探します。PATH に入っていなくても見つかります。見つかった場所は LAUNCH に表示されます。
+  1. PATH（アプリの起動後に入れたものも見えるよう、Windows に保存された最新の PATH も読む）
+  2. いつものインストール先: `~\.local\bin`（公式インストーラ）、npm（`%APPDATA%\npm` と `npm config get prefix`）、nvm・Volta・Scoop・pnpm・Bun・Yarn・winget、`%LOCALAPPDATA%\agy\bin`
+  3. 同梱の本体: VS Code / Cursor / Windsurf / Antigravity の拡張機能に入っている `claude.exe`・`codex.exe`、Claude デスクトップアプリの `claude-code`
+  4. WSL（Linux）の中の `claude`・`codex`
 - Claude Code は `claude -p`、Codex は `codex exec --full-auto` で動かします。依頼の文面は標準入力で渡します。
 - Antigravity は CLI の `agy -p` で動かします（`--help` に載っていれば `--dangerously-skip-permissions` と `--sandbox` も付けます）。依頼が長いときは `OZ_TASK.md` に書いて、それを読んで作業するよう頼みます。
 - `agy` がなくエディタだけあるときは、依頼を `OZ_TASK.md` に書いて作業場所を Antigravity で開きます。終わったら「完了にする」を押すと変更を保存します。

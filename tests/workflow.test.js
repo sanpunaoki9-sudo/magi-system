@@ -216,6 +216,20 @@ test('PATH に無くても、よくあるインストール先から見つける
   const home = tmp('home');
   fs.mkdirSync(path.join(home, '.local', 'bin'), { recursive: true });
   fakeAgy(path.join(home, '.local', 'bin'));
+  // Claude Code と Codex は VS Code 拡張に同梱の本体から見つける。拡張が複数の版あれば新しい方を使う
+  const ext = (name, ...sub) => {
+    const dir = path.join(home, '.vscode', 'extensions', name, ...sub);
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  };
+  const claudeDir = ext('anthropic.claude-code-2.1.0-linux-x64', 'resources', 'native-binary');
+  fs.writeFileSync(path.join(claudeDir, 'claude'), '#!/usr/bin/env bash\necho "2.1.0 (Claude Code)"\n', { mode: 0o755 });
+  const oldCodex = ext('openai.chatgpt-0.1.0-linux-x64', 'bin', 'linux-x86_64');
+  fs.writeFileSync(path.join(oldCodex, 'codex'), '#!/usr/bin/env bash\necho "codex-cli 0.1.0"\n', { mode: 0o755 });
+  const newCodex = ext('openai.chatgpt-0.2.0-linux-x64', 'bin', 'linux-x86_64');
+  fs.writeFileSync(path.join(newCodex, 'codex'), '#!/usr/bin/env bash\necho "codex-cli 0.2.0"\n', { mode: 0o755 });
+  fs.utimesSync(path.dirname(path.dirname(oldCodex)), new Date(2020, 0, 1), new Date(2020, 0, 1));
+
   const oldHome = process.env.HOME;
   const oldPath = process.env.PATH;
   process.env.HOME = home;
@@ -224,9 +238,20 @@ test('PATH に無くても、よくあるインストール先から見つける
   delete require.cache[modPath];
   try {
     const { createAgents: fresh } = require('../electron/services/agents');
-    const info = (await fresh({ openExternal: () => true }).detect({ force: true })).agents.find((a) => a.id === 'antigravity');
+    const agents = (await fresh({ openExternal: () => true }).detect({ force: true })).agents;
+    const info = agents.find((a) => a.id === 'antigravity');
     assert.equal(info.cli.path, path.join(home, '.local', 'bin', 'agy'));
     assert.equal(info.cli.source, 'インストール先');
+
+    const claude = agents.find((a) => a.id === 'claude-code');
+    assert.equal(claude.cli.path, path.join(claudeDir, 'claude'));
+    assert.equal(claude.cli.source, 'VS Code 拡張に同梱');
+    assert.equal(claude.version, '2.1.0 (Claude Code)');
+    assert.equal(claude.headless, true);
+
+    const codex = agents.find((a) => a.id === 'codex');
+    assert.equal(codex.cli.path, path.join(newCodex, 'codex'));
+    assert.equal(codex.version, 'codex-cli 0.2.0');
   } finally {
     process.env.HOME = oldHome;
     process.env.PATH = oldPath;
