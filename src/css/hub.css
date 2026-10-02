@@ -83,7 +83,6 @@
   margin: calc(var(--d) / -2) 0 0 calc(var(--d) / -2);
   border-radius: 50%;
   background: var(--surface);
-  border: 1.5px solid var(--ink);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -91,16 +90,17 @@
   gap: 4px;
   pointer-events: auto;
   will-change: transform;
-  transition:
-    border-color 240ms var(--ease-out),
-    box-shadow 240ms var(--ease-out),
-    background-color 240ms var(--ease-out);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+  transition: box-shadow 240ms var(--ease-out);
+  /* 縁取りは付けず、影だけで白い丸を浮かせる */
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.06),
+    0 10px 28px rgba(0, 0, 0, 0.1);
 }
 
 .tab:hover {
-  border-color: var(--pink);
-  box-shadow: 0 10px 28px rgba(224, 80, 140, 0.18);
+  box-shadow:
+    0 1px 3px rgba(224, 80, 140, 0.12),
+    0 12px 32px rgba(224, 80, 140, 0.28);
 }
 
 .tab-inner {

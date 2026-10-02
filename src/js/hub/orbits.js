@@ -12,9 +12,7 @@ const TEXTURE = { width: 2048, height: 64, font: 'bold 28px Arial, sans-serif' }
 
 // r: 半径 / tilt: 手前への倒れ具合 / roll: 画面上の傾き / speed: コードの流れる速さ
 const ORBITS = [
-  { r: 3.4, tilt: 72, roll: -14, speed: 0.045 },
-  { r: 4.6, tilt: 76, roll: 9, speed: -0.032 },
-  { r: 5.9, tilt: 70, roll: -4, speed: 0.024 },
+  { r: 4.6, tilt: 74, roll: -8, speed: 0.035 },
 ];
 
 const CODE = [
