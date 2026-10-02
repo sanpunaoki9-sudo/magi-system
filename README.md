@@ -31,7 +31,7 @@ npm test           # テスト
 
 1. 起動パスワードを決めて Enter（次からはそのパスワードで解錠）
 2. **SETTINGS** で Git の名前とメールアドレスを保存（作業フォルダは `ドキュメント\OZ-Workspace` が自動で作られます）
-3. **LAUNCH** で Claude Code / Codex の「インストール」と「VS Code 拡張を追加」を押す。Antigravity は「ダウンロードページ」から入れる
+3. **LAUNCH** で各エージェントが見つかった場所を確認する。足りないものは Claude Code / Codex なら「CLI をインストール」と「VS Code 拡張を追加」、Antigravity なら「CLI の入れ方を開く」（`agy`）と「エディタをダウンロード」から入れる
    - Claude Code と Codex は、初回だけターミナルで `claude` / `codex` を起動してログインしておいてください
 4. **TALK** の「音声の設定」で音声認識のモデルをダウンロード（初回だけ）
 5. **GRAPH** で Obsidian の保管庫「開発環境001」が表示されることを確認（見つからなければ「保管庫を選ぶ」）
@@ -70,8 +70,10 @@ npm run dev:web
 ### エージェントの動かし方
 
 - 作業フォルダ（初期値は `ドキュメント\OZ-Workspace`）を Git で管理し、エージェントごとに専用ブランチ `oz/<名前>` と専用の作業場所 `.oz-worktrees/<名前>` を作ります。同時に作業してもぶつかりません。
+- エージェントは PATH と、いつものインストール先（`~\.local\bin`、`%APPDATA%\npm`、`%LOCALAPPDATA%\agy\bin`、`%LOCALAPPDATA%\Programs\Antigravity` など）の両方から探します。PATH に入っていなくても見つかります。
 - Claude Code は `claude -p`、Codex は `codex exec --full-auto` で動かします。依頼の文面は標準入力で渡します。
-- Antigravity は外から指示を送る公式の方法がないため、依頼を `OZ_TASK.md` に書いて作業場所を Antigravity で開きます。終わったら「完了にする」を押すと変更を保存します。
+- Antigravity は CLI の `agy -p` で動かします（`--help` に載っていれば `--dangerously-skip-permissions` と `--sandbox` も付けます）。依頼が長いときは `OZ_TASK.md` に書いて、それを読んで作業するよう頼みます。
+- `agy` がなくエディタだけあるときは、依頼を `OZ_TASK.md` に書いて作業場所を Antigravity で開きます。終わったら「完了にする」を押すと変更を保存します。
 - 作業が終わると自動でコミットし、Obsidian の `OZ/作業ログ` に記録を残します。
 - 分担した作業が全員終わると、まとめ先のブランチ（main など）に自動で統合します。衝突したときは Claude Code に解決を頼んでから、もう一度統合します。
 
@@ -84,7 +86,7 @@ npm run dev:web
 
 ### 利用枠と自動再開
 
-- エージェントの出力に「usage limit reached」などが出たら上限と判断し、出力に書かれた回復時刻（例: 「try again in 2h」「resets at 3pm」）を読み取ります。時刻が分からないときは5時間後とします。
+- エージェントの出力に「usage limit reached」「Individual quota reached」などが出たら上限と判断し、出力に書かれた回復時刻（例: 「try again in 2h」「resets at 3pm」）を読み取ります。時刻が分からないときは5時間後とします。
 - 上限になった依頼は、途中までの変更をコミットして「利用枠の回復待ち」にします。回復時刻を過ぎると、続きから再開するよう伝えて自動で再開します。
 - 待ち状態はファイルに保存するので、アプリを閉じても次に起動したときに再開します。
 - Codex は記録ファイル（`~/.codex/sessions`）から残りの割合も読み取ります。Antigravity は利用枠の画面から手動で「上限にする」「回復した」を切り替えられます。

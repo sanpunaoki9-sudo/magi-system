@@ -153,3 +153,83 @@ test('依頼: 利用枠の上限で途中まで保存して待ち、回復した
     process.env.PATH = oldPath;
   }
 });
+
+function fakeAgy(bin) {
+  // --help には自動承認の旗のうち1つだけを載せる（入っている版で使える旗だけを付けるかの確認）
+  fs.writeFileSync(path.join(bin, 'agy'), `#!/usr/bin/env bash
+case "$1" in
+  --version) echo "agy 1.2.3"; exit 0 ;;
+  --help) printf 'Usage: agy [flags]\\n  -p, --prompt string\\n  --dangerously-skip-permissions\\n'; exit 0 ;;
+esac
+if [ "$1" = "-p" ]; then
+  shift; prompt="$1"; shift
+  echo "$*" > agy-flags.txt
+  [ -f OZ_TASK.md ] && cp OZ_TASK.md task-copy.txt
+  echo "$prompt" | head -c 200 > agy-prompt.txt
+  echo done; exit 0
+fi
+exit 2
+`, { mode: 0o755 });
+}
+
+test('Antigravity CLI（agy）: 見つけて、使える旗だけで自動実行する。長い依頼はファイルで渡してコミットには含めない', { skip: !POSIX, timeout: 60000 }, async () => {
+  const dir = tmp('agy');
+  const bin = path.join(dir, 'bin');
+  fs.mkdirSync(bin);
+  fakeAgy(bin);
+  const oldPath = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${oldPath}`;
+  const ws = path.join(dir, 'ws');
+  fs.mkdirSync(ws);
+  try {
+    const agents = createAgents({ openExternal: () => true });
+    const info = (await agents.detect({ force: true })).agents.find((a) => a.id === 'antigravity');
+    assert.equal(info.headless, true);
+    assert.equal(info.cli.version, 'agy 1.2.3');
+    assert.deepEqual(info.taskFlags, ['--dangerously-skip-permissions']);
+
+    const inv = await agents.invocation('antigravity', { mode: 'task', prompt: '画面を作る', cwd: ws });
+    assert.deepEqual(inv.args, ['-p', '画面を作る', '--dangerously-skip-permissions']);
+    assert.equal(inv.shell, false);
+    const chat = await agents.invocation('antigravity', { mode: 'chat', prompt: 'こんにちは', cwd: ws });
+    assert.deepEqual(chat.args, ['-p', 'こんにちは']);
+
+    const git = createGit({ getConfig: () => ({ workspace: ws }) });
+    const runner = createRunner({ agents, git, quota: createQuota(), vault: { ensureHub() {}, addNote() {} }, dataDir: path.join(dir, 'data') });
+    runner.startLoop();
+    const long = `長い依頼 ${'あ'.repeat(25000)}`;
+    const job = runner.submit({ agentId: 'antigravity', prompt: long });
+    await until(() => ['done', 'failed'].includes(runner.get(job.id).status));
+    const done = runner.get(job.id);
+    assert.equal(done.status, 'done', done.error ?? '');
+    const committed = done.commit.files.map((f) => f.file).sort();
+    assert.ok(committed.includes('task-copy.txt'));
+    assert.ok(!committed.includes('OZ_TASK.md'));
+    assert.match(fs.readFileSync(path.join(git.worktreePath('antigravity'), 'agy-prompt.txt'), 'utf8'), /OZ_TASK\.md/);
+    runner.stopAll();
+  } finally {
+    process.env.PATH = oldPath;
+  }
+});
+
+test('PATH に無くても、よくあるインストール先から見つける', { skip: !POSIX }, async () => {
+  const home = tmp('home');
+  fs.mkdirSync(path.join(home, '.local', 'bin'), { recursive: true });
+  fakeAgy(path.join(home, '.local', 'bin'));
+  const oldHome = process.env.HOME;
+  const oldPath = process.env.PATH;
+  process.env.HOME = home;
+  process.env.PATH = '/usr/bin:/bin';
+  const modPath = require.resolve('../electron/services/agents');
+  delete require.cache[modPath];
+  try {
+    const { createAgents: fresh } = require('../electron/services/agents');
+    const info = (await fresh({ openExternal: () => true }).detect({ force: true })).agents.find((a) => a.id === 'antigravity');
+    assert.equal(info.cli.path, path.join(home, '.local', 'bin', 'agy'));
+    assert.equal(info.cli.source, 'インストール先');
+  } finally {
+    process.env.HOME = oldHome;
+    process.env.PATH = oldPath;
+    delete require.cache[modPath];
+  }
+});

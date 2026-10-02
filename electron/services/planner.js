@@ -71,18 +71,18 @@ function createPlanner({ agents, quota, git, spawnImpl = spawn }) {
       cwd = undefined;
     }
 
+    const inv = await agents.invocation(planner.id, { mode: 'plan', prompt: buildPrompt(text, available), cwd });
+    if (!inv) {
+      return { source: 'fallback', reason: 'Claude Code が見つからないため、簡単な分担にしました', assignments: fallbackPlan(text, available) };
+    }
     const output = await new Promise((resolve) => {
-      const child = spawnImpl(planner.command, ['-p', '--output-format', 'text'], {
-        cwd,
-        shell: process.platform === 'win32',
-        windowsHide: true,
-      });
+      const child = spawnImpl(inv.command, inv.args, { cwd, shell: inv.shell, windowsHide: true });
       let out = '';
       const timer = setTimeout(() => child.kill(), TIMEOUT_MS);
       child.stdout?.on('data', (d) => { out += d; });
       child.stderr?.on('data', (d) => { out += d; });
       child.stdin?.on('error', () => {});
-      child.stdin?.end(buildPrompt(text, available));
+      child.stdin?.end(inv.stdin);
       child.on('error', () => { clearTimeout(timer); resolve(out); });
       child.on('close', () => { clearTimeout(timer); resolve(out); });
     });

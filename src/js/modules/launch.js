@@ -41,21 +41,39 @@ export function createLaunchModule(oz) {
           const btn = h('button', { type: 'button', class: 'btn btn-primary' }, '起動');
           btn.addEventListener('click', () => run(btn, () => oz.agents.launch(agent.id), (r) => `${r.opened.join(' と ')} を開きました（${r.branch}）`));
           actions.push(btn);
-        } else if (agent.kind === 'cli' && agent.npmPackage) {
-          const btn = h('button', { type: 'button', class: 'btn btn-primary' }, 'インストール');
+        }
+        // CLI がなければ入れ方を出す（npm で入るものはここから入れる。agy は公式の手順を開く）
+        if (!agent.cli) {
+          const label = agent.npmPackage ? 'CLI をインストール' : 'CLI の入れ方を開く';
+          const btn = h('button', { type: 'button', class: agent.installed ? 'btn' : 'btn btn-primary' }, label);
           btn.addEventListener('click', async () => {
-            const r = await run(btn, () => oz.agents.install({ agentId: agent.id, what: 'cli' }), `${agent.name} をインストールしました`);
-            if (!r?.error) load(true);
+            const r = await run(btn, () => oz.agents.install({ agentId: agent.id, what: 'cli' }), agent.npmPackage ? `${agent.name} をインストールしました` : null);
+            if (!r?.error && agent.npmPackage) load(true);
           });
           actions.push(btn);
-        } else if (agent.downloadUrl) {
-          actions.push(h('button', { type: 'button', class: 'btn btn-primary', onclick: () => openExternal(oz, agent.downloadUrl) }, 'ダウンロードページ'));
+        }
+        if (agent.hasIde && !agent.ide && agent.downloadUrl) {
+          actions.push(h('button', { type: 'button', class: 'btn', onclick: () => openExternal(oz, agent.downloadUrl) }, 'エディタをダウンロード'));
         }
         if (agent.vscodeExtension) {
           const btn = h('button', { type: 'button', class: 'btn' }, 'VS Code 拡張を追加');
           btn.addEventListener('click', () => run(btn, () => oz.agents.install({ agentId: agent.id, what: 'extension' }), `${agent.name} の VS Code 拡張を追加しました`));
           actions.push(btn);
         }
+
+        // 見つかった場所（なければ「見つかりません」）
+        const where = (label, item, extra = '') =>
+          h('li', {}, h('span', { class: 'found-label' }, label),
+            item ? h('code', { class: 'found-path' }, item.path) : h('span', { class: 'muted' }, '見つかりません'),
+            item ? h('span', { class: 'muted' }, ` ${[item.version ?? extra, item.source].filter(Boolean).join(' · ')}`) : null);
+
+        const note = agent.id === 'antigravity'
+          ? agent.headless
+            ? '指令室から依頼すると、agy が自動で作業します（ほかの2つと同じ）。'
+            : agent.ide
+              ? 'agy（CLI）がないため、依頼は OZ_TASK.md に書いてエディタで開きます。終わったら「完了にする」を押してください。agy を入れると自動になります。'
+              : null
+          : null;
 
         return h(
           'section',
@@ -65,14 +83,15 @@ export function createLaunchModule(oz) {
             h('span', { class: 'muted' }, agent.vendor),
           ),
           h('div', { class: 'agent-card-states' },
-            agent.installed ? statusChip('インストール済み', 'good') : statusChip('未インストール', 'neutral'),
+            agent.headless ? statusChip('自動で作業できる', 'good') : agent.installed ? statusChip('手動の受け渡し', 'warning') : statusChip('未インストール', 'neutral'),
             quotaChip(agent.quota),
           ),
-          h('p', { class: 'agent-meta' }, agent.version ?? (agent.kind === 'app' ? 'アプリ' : '')),
+          h('ul', { class: 'found' },
+            where('CLI', agent.cli),
+            agent.hasIde ? where('エディタ', agent.ide) : null,
+          ),
           h('p', { class: 'agent-strengths' }, `得意: ${agent.strengths}`),
-          agent.kind === 'app'
-            ? h('p', { class: 'muted agent-note' }, '指令室から依頼すると、依頼を OZ_TASK.md に書いて Antigravity で作業場所を開きます。')
-            : null,
+          note ? h('p', { class: 'muted agent-note' }, note) : null,
           h('div', { class: 'agent-actions' }, ...actions),
         );
       }

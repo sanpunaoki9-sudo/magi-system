@@ -1170,3 +1170,30 @@ details.notice ul {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* 見つかった場所 */
+.found {
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.found li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.found-label {
+  font-weight: 700;
+  min-width: 56px;
+}
+
+.found-path {
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}

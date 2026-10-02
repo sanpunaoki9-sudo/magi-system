@@ -15,6 +15,8 @@ const LIMIT_PATTERNS = [
   /too many requests/i,
   /利用.{0,4}(?:上限|制限).{0,6}(?:達|到達|超)/,
   /(?:5-hour|weekly) limit/i,
+  /(?:individual )?quota (?:reached|limit)/i,
+  /RESOURCE_EXHAUSTED/,
 ];
 
 // 「resets at 3pm」「try again in 2h30m」などから回復時刻(ms)を読む

@@ -153,7 +153,11 @@ function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, spaw
   async function start(job) {
     const agent = agents.byId(job.agentId);
     update(job, { status: 'running', startedAt: Date.now(), attempts: job.attempts + 1, error: null, resumeAt: null });
+    // 前回の試行の結果を持ち越さない
     job.limitHit = false;
+    job.spawnError = false;
+    job.timedOut = false;
+    job.exitCode = null;
 
     const wt = await git.prepareWorktree(job.worktreeOf);
     job.worktree = wt.path;
@@ -172,19 +176,26 @@ function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, spaw
       prompt += `\n\n衝突しているファイル:\n${files.map((f) => `- ${f}`).join('\n')}`;
     }
 
-    // Antigravity などのアプリは、依頼をファイルに書いて作業場所を開く（終わったら「完了」を押してもらう）
-    if (agent.kind === 'app') {
-      fs.writeFileSync(path.join(wt.path, 'OZ_TASK.md'), `# OZ Assistant からの依頼\n\n${prompt}\n`, 'utf8');
-      await agents.launch(agent.id, wt.path).catch((err) => log(job, err.message));
-      log(job, `${agent.name} で作業場所を開きました。依頼は OZ_TASK.md にあります。終わったら「完了」を押してください。`);
-      update(job, { status: 'handed-off' });
-      return;
+    const text = (job.resume || job.attempts > 1 ? RESUME_NOTE : '') + prompt;
+    const inv = await agents.invocation(job.agentId, { mode: 'task', prompt: text, cwd: wt.path });
+
+    if (!inv) {
+      // CLI がなくエディタだけある（Antigravity のエディタのみ）: 依頼をファイルに書いて作業場所を開き、「完了」を押してもらう
+      const detected = (await agents.detect()).agents.find((a) => a.id === job.agentId);
+      if (detected?.ide) {
+        fs.writeFileSync(path.join(wt.path, agents.TASK_FILE), `# OZ Assistant からの依頼\n\n${prompt}\n`, 'utf8');
+        await agents.launch(agent.id, wt.path).catch((err) => log(job, err.message));
+        log(job, `${agent.name} のエディタで作業場所を開きました。依頼は ${agents.TASK_FILE} にあります。終わったら「完了にする」を押してください。`);
+        log(job, `自動で動かすには Antigravity CLI（agy）を入れてください。`);
+        update(job, { status: 'handed-off' });
+        return;
+      }
+      throw new Error(`${agent.name} が見つかりません。単体起動の画面からインストールしてください`);
     }
 
-    const text = (job.resume || job.attempts > 1 ? RESUME_NOTE : '') + prompt;
-    const child = spawnImpl(agent.command, agent.headlessArgs, {
+    const child = spawnImpl(inv.command, inv.args, {
       cwd: wt.path,
-      shell: process.platform === 'win32',
+      shell: inv.shell,
       windowsHide: true,
       detached: process.platform !== 'win32',
       env: { ...process.env, OZ_ASSISTANT: '1' },
@@ -201,7 +212,7 @@ function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, spaw
     child.stdout?.on('data', (d) => log(job, d, { fromAgent: true }));
     child.stderr?.on('data', (d) => log(job, d, { fromAgent: true }));
     child.stdin?.on('error', () => {});
-    child.stdin?.end(text);
+    child.stdin?.end(inv.stdin);
 
     await new Promise((resolve) => {
       child.on('error', (err) => {
@@ -221,6 +232,8 @@ function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, spaw
 
   async function finish(job) {
     const agent = agents.byId(job.agentId);
+    // 依頼を書いたファイルが残っていたら、コミットに含めないように消す
+    if (job.worktree) fs.rmSync(path.join(job.worktree, agents.TASK_FILE), { force: true });
     if (job.status === 'cancelled') {
       await git.commitAll(job.worktree, `${agent.name}: 取り消し時点の保存`).catch(() => null);
       schedule();
@@ -332,7 +345,7 @@ function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, spaw
     if (!job || job.status !== 'handed-off') throw new Error('完了にできる依頼ではありません');
     const agent = agents.byId(job.agentId);
     try {
-      fs.rmSync(path.join(job.worktree, 'OZ_TASK.md'), { force: true });
+      fs.rmSync(path.join(job.worktree, agents.TASK_FILE), { force: true });
     } catch {
       // 消せなくても続ける
     }

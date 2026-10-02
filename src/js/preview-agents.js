@@ -1,8 +1,8 @@
 // ブラウザで画面を確認するときの、エージェント関連のサンプル（Electron では使わない）
 const AGENTS = [
-  { id: 'claude-code', name: 'Claude Code', vendor: 'Anthropic', kind: 'cli', strengths: '設計・レビュー・テスト・複雑な変更', npmPackage: '@anthropic-ai/claude-code', vscodeExtension: 'anthropic.claude-code', installed: true, version: 'サンプル 1.0' },
-  { id: 'codex', name: 'Codex', vendor: 'OpenAI', kind: 'cli', strengths: '処理の実装・API・スクリプト', npmPackage: '@openai/codex', vscodeExtension: 'openai.chatgpt', installed: true, version: 'サンプル 0.1' },
-  { id: 'antigravity', name: 'Antigravity', vendor: 'Google', kind: 'app', strengths: '画面・UI・ブラウザでの確認', downloadUrl: 'https://antigravity.google/download', installed: false, version: null },
+  { id: 'claude-code', name: 'Claude Code', vendor: 'Anthropic', kind: 'cli', strengths: '設計・レビュー・テスト・複雑な変更', npmPackage: '@anthropic-ai/claude-code', vscodeExtension: 'anthropic.claude-code', installed: true, headless: true, cli: { path: 'C:\\Users\\you\\.local\\bin\\claude.exe', version: 'サンプル 2.0', source: 'PATH' }, ide: null, hasIde: false },
+  { id: 'codex', name: 'Codex', vendor: 'OpenAI', kind: 'cli', strengths: '処理の実装・API・スクリプト', npmPackage: '@openai/codex', vscodeExtension: 'openai.chatgpt', installed: true, headless: true, cli: { path: 'C:\\Users\\you\\AppData\\Roaming\\npm\\codex.cmd', version: 'サンプル 0.9', source: 'PATH' }, ide: null, hasIde: false },
+  { id: 'antigravity', name: 'Antigravity', vendor: 'Google', kind: 'app', strengths: '画面・UI・ブラウザでの確認', downloadUrl: 'https://antigravity.google/download', installUrl: 'https://antigravity.google/docs/cli', installed: true, headless: true, cli: { path: 'C:\\Users\\you\\AppData\\Local\\agy\\bin\\agy.exe', version: 'サンプル 1.2', source: 'インストール先' }, ide: { path: 'C:\\Users\\you\\AppData\\Local\\Programs\\Antigravity\\Antigravity.exe', source: 'インストール先' }, hasIde: true },
 ];
 
 export function createAgentPreview() {

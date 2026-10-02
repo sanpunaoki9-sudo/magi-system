@@ -76,16 +76,18 @@ function createTalk({ agents, quota, runner, planner, news, system, vault, dataD
   const cwd = path.join(dataDir, 'talk');
   fs.mkdirSync(cwd, { recursive: true });
 
-  function run(agent, args, input) {
+  async function run(agentId, input) {
+    const inv = await agents.invocation(agentId, { mode: 'chat', prompt: input, cwd });
+    if (!inv) return { ok: false, out: '', err: '見つかりません' };
     return new Promise((resolve) => {
-      const child = spawnImpl(agent.command, args, { cwd, shell: process.platform === 'win32', windowsHide: true });
+      const child = spawnImpl(inv.command, inv.args, { cwd, shell: inv.shell, windowsHide: true });
       let out = '';
       let err = '';
       const timer = setTimeout(() => child.kill(), TIMEOUT_MS);
       child.stdout?.on('data', (d) => { out += d; });
       child.stderr?.on('data', (d) => { err += d; });
       child.stdin?.on('error', () => {});
-      child.stdin?.end(input);
+      child.stdin?.end(inv.stdin);
       child.on('error', (e) => { clearTimeout(timer); resolve({ ok: false, out, err: e.message }); });
       child.on('close', (code) => { clearTimeout(timer); resolve({ ok: code === 0, out, err }); });
     });
@@ -106,13 +108,10 @@ function createTalk({ agents, quota, runner, planner, news, system, vault, dataD
     const detected = await agents.detect();
     const installed = new Set(detected.agents.filter((a) => a.installed).map((a) => a.id));
 
-    const brains = [
-      { id: 'claude-code', args: ['-p', '--output-format', 'text'] },
-      { id: 'codex', args: ['exec', '--skip-git-repo-check', '-'] },
-    ];
+    const brains = [{ id: 'claude-code' }, { id: 'codex' }];
     for (const brain of brains) {
       if (!installed.has(brain.id) || quota.get(brain.id).state === 'exhausted') continue;
-      const result = await run(agents.byId(brain.id), brain.args, prompt);
+      const result = await run(brain.id, prompt);
       if (limited(brain.id, result)) continue;
       const reply = clean(result.out);
       if (result.ok && reply) return { reply, source: brain.id };
