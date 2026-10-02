@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- importmap の内容を変えたら sha256 も更新する: node scripts/csp-hash.mjs -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-6rX/ghiU0wmIob37XNe4rz0/rjj55ElUvVeEEDziyHU='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'">
+  <title>OZ Assistant</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "../node_modules/three/build/three.module.js",
+      "three/addons/": "../node_modules/three/examples/jsm/",
+      "d3-geo": "../node_modules/d3-geo/src/index.js",
+      "d3-array": "../node_modules/d3-array/src/index.js",
+      "internmap": "../node_modules/internmap/src/index.js",
+      "topojson-client": "../node_modules/topojson-client/src/index.js"
+    }
+  }
+  </script>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/hub.css">
+  <link rel="stylesheet" href="css/panel.css">
+  <link rel="stylesheet" href="css/lock.css">
+</head>
+<body>
+  <!-- ハブ画面 -->
+  <main id="hub" class="hub" aria-label="OZ ハブ">
+    <canvas id="scene" class="hub-scene"></canvas>
+
+    <header class="hub-brand">
+      <span class="hub-brand-mark">OZ</span>
+      <span class="hub-brand-sub">ASSISTANT</span>
+    </header>
+
+    <div class="clock" aria-live="off">
+      <div class="clock-date" id="clockDate">----.--.-- ---</div>
+      <div class="clock-time" id="clockTime">00:00:00:00</div>
+    </div>
+
+    <nav id="tabLayer" class="tab-layer" aria-label="機能タブ"></nav>
+  </main>
+
+  <!-- 丸タブから開くパネル -->
+  <div id="panelLayer" class="panel-layer"></div>
+
+  <!-- 起動画面（鍵穴） -->
+  <section id="lock" class="lock" aria-label="起動画面">
+    <svg id="lockSvg" class="lock-svg" aria-hidden="true">
+      <defs>
+        <mask id="keyholeMask" maskUnits="userSpaceOnUse">
+          <rect id="maskBase" x="0" y="0" width="100%" height="100%" fill="#fff"></rect>
+          <g id="maskKeyhole" fill="#000">
+            <path d="M -18.67 1.37 A 40 40 0 1 1 18.67 1.37 L 32 76 L -32 76 Z"></path>
+          </g>
+        </mask>
+      </defs>
+      <rect class="lock-cover" x="0" y="0" width="100%" height="100%" mask="url(#keyholeMask)"></rect>
+      <g id="pinkKeyhole" class="lock-keyhole">
+        <path d="M -18.67 1.37 A 40 40 0 1 1 18.67 1.37 L 32 76 L -32 76 Z"></path>
+      </g>
+    </svg>
+
+    <form id="lockForm" class="lock-form" autocomplete="off">
+      <p id="lockMessage" class="lock-message">パスワードを入力してください</p>
+      <input id="lockPassword" class="lock-input" type="password" placeholder="PASSWORD" aria-label="パスワード">
+      <input id="lockConfirm" class="lock-input" type="password" placeholder="CONFIRM" aria-label="パスワード（確認）" hidden>
+      <button type="submit" class="lock-submit">UNLOCK</button>
+      <p id="lockError" class="lock-error" role="alert"></p>
+    </form>
+  </section>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

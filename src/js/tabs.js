@@ -1,0 +1,73 @@
+// ハブのまわりに並ぶ丸タブの定義。並び順は時計回り（上から）。
+export const TABS = [
+  {
+    id: 'talk',
+    en: 'TALK',
+    ja: '話しかけモード',
+    summary: '声で話しかけると、女性の声で返事をします。',
+    features: ['PC内で動く音声認識（whisper.cpp）', '女性の声で読み上げ', '会話はObsidianに自動で記録'],
+  },
+  {
+    id: 'launch',
+    en: 'LAUNCH',
+    ja: '単体起動',
+    summary: 'Antigravity / Claude Code / Codex を個別に起動します。',
+    features: ['起動と同時にVS Codeで作業フォルダを開く', 'AIの書き換えをリアルタイムで表示', 'エージェントごとの起動・停止'],
+  },
+  {
+    id: 'command',
+    en: 'COMMAND',
+    ja: '指令室',
+    summary: '1つの依頼を分解して、3つのAIに分担させます。',
+    features: ['司令塔AIによる作業の分解と割り振り', '個別指示 / 一括指示', 'AIごとのGitブランチで並行作業と統合'],
+  },
+  {
+    id: 'agents',
+    en: 'AGENTS',
+    ja: 'AGENTSの状態',
+    summary: '各エージェントの稼働状況を表示します。',
+    features: ['起動中 / 作業中 / 待機中', '各社サービスの障害情報', '現在の作業内容'],
+  },
+  {
+    id: 'quota',
+    en: 'QUOTA',
+    ja: 'AGENTSの利用枠',
+    summary: '各エージェントの残りの利用枠を表示します。',
+    features: ['5時間枠・週間枠の残量', 'リセットまでの時間', '使用ペースのグラフ'],
+  },
+  {
+    id: 'graph',
+    en: 'GRAPH',
+    ja: 'グラフビュー',
+    summary: 'Obsidian「開発環境001」を3Dグラフで表示します。',
+    features: ['ノートとリンクの3D表示', 'ノートの自動追加', '検索とフォーカス'],
+  },
+  {
+    id: 'news',
+    en: 'NEWS',
+    ja: 'AIニュース',
+    summary: 'AI関連のニュースを幅広く集めます。',
+    features: ['各社公式・研究・コミュニティ・日本語', 'カテゴリ絞り込みと検索', 'Obsidianへワンクリック保存'],
+  },
+  {
+    id: 'ranking',
+    en: 'RANKING',
+    ja: 'GitHubランキング',
+    summary: 'GitHubのスター数ランキングを表示します。',
+    features: ['急上昇（日 / 週 / 月）', '総スター数', 'スターの伸び'],
+  },
+  {
+    id: 'system',
+    en: 'SYSTEM',
+    ja: 'PCの状態',
+    summary: 'パソコンの状態をリアルタイムのグラフで表示します。',
+    features: ['CPU / メモリ / GPU', 'ディスク / ネットワーク', '温度'],
+  },
+  {
+    id: 'settings',
+    en: 'SETTINGS',
+    ja: '設定',
+    summary: 'アプリ全体の設定を行います。',
+    features: ['起動パスワード', '作業フォルダ・保管庫の場所', '音声・表示の設定'],
+  },
+];

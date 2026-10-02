@@ -1,0 +1,161 @@
+.hub {
+  position: fixed;
+  inset: 0;
+  transition: filter 600ms var(--ease-out);
+}
+
+.hub-scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.hub-brand {
+  position: absolute;
+  top: 28px;
+  left: 36px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.hub-brand-mark {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.hub-brand-sub {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: var(--ink-sub);
+}
+
+/* 中央の時計（地球儀の手前） */
+.clock {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+  text-shadow:
+    0 0 6px var(--bg),
+    0 0 12px var(--bg),
+    0 0 18px var(--bg);
+}
+
+.clock-date {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  color: var(--ink-sub);
+  margin-bottom: 6px;
+}
+
+.clock-time {
+  font-size: clamp(40px, 4.6vw, 68px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* 丸タブ */
+.tab-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transition: opacity 500ms var(--ease-out);
+}
+
+.tab {
+  --d: 120px;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--d);
+  height: var(--d);
+  margin: calc(var(--d) / -2) 0 0 calc(var(--d) / -2);
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1.5px solid var(--ink);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  pointer-events: auto;
+  will-change: transform;
+  transition:
+    border-color 240ms var(--ease-out),
+    box-shadow 240ms var(--ease-out),
+    background-color 240ms var(--ease-out);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
+}
+
+.tab:hover {
+  border-color: var(--pink);
+  box-shadow: 0 10px 28px rgba(224, 80, 140, 0.18);
+}
+
+.tab-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: transform 240ms var(--ease-out);
+}
+
+.tab:hover .tab-inner {
+  transform: scale(1.06);
+}
+
+.tab-en {
+  font-size: calc(var(--d) * 0.135);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.tab-ja {
+  font-size: calc(var(--d) * 0.095);
+  color: var(--ink-sub);
+  white-space: nowrap;
+}
+
+.tab.is-source {
+  visibility: hidden;
+}
+
+/* パネルを開いている間 */
+.hub.is-focused .tab-layer {
+  opacity: 0.12;
+  pointer-events: none;
+}
+
+.hub.is-focused .tab-layer .tab {
+  pointer-events: none;
+}
+
+.hub.is-focused .clock,
+.hub.is-focused .hub-brand {
+  opacity: 0.25;
+  transition: opacity 500ms var(--ease-out);
+}
+
+.clock,
+.hub-brand {
+  transition: opacity 500ms var(--ease-out);
+}
+
+.hub.is-focused .hub-scene {
+  opacity: 0.35;
+}
+
+.hub-scene {
+  transition: opacity 500ms var(--ease-out);
+}

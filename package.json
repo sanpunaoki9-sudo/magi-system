@@ -1,0 +1,43 @@
+{
+  "name": "oz-assistant",
+  "productName": "OZ Assistant",
+  "version": "0.1.0",
+  "description": "OZ-style personal AI assistant for Windows",
+  "main": "electron/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev:web": "node scripts/dev-server.mjs",
+    "dist": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.oz.assistant",
+    "productName": "OZ Assistant",
+    "files": [
+      "electron/**",
+      "src/**",
+      "node_modules/**",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "dependencies": {
+    "d3-geo": "^3.1.1",
+    "three": "^0.186.1",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3"
+  }
+}
