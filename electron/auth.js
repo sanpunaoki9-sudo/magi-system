@@ -50,7 +50,7 @@ function setPassword(password) {
   return { ok: true };
 }
 
-// 入力のたびに呼ばれるので、メインプロセスを止めない非同期版を使う
+// メインプロセスを止めないように非同期版を使う
 async function verify(password) {
   const { auth } = readConfig();
   if (!auth || typeof password !== 'string') return { ok: false };

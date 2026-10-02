@@ -101,17 +101,11 @@ export function createLock({ onUnlock }) {
     root.remove();
   }
 
-  // 正しいパスワードを打ち終えた瞬間に解錠する
-  password.addEventListener('input', async () => {
-    if (setupMode || opening) return;
+  password.addEventListener('input', () => {
     error.textContent = '';
-    const typed = password.value;
-    if (!typed) return;
-    const { ok } = await oz.auth.verify(typed);
-    if (ok && password.value === typed) open();
   });
 
-  // Enter: 初回はパスワードの決定、2回目以降は間違いの通知
+  // Enter: 初回はパスワードの決定、2回目以降は照合して解錠
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (opening) return;
@@ -123,10 +117,9 @@ export function createLock({ onUnlock }) {
       return;
     }
 
-    const typed = password.value;
-    const { ok } = await oz.auth.verify(typed);
+    const { ok } = await oz.auth.verify(password.value);
     if (ok) open();
-    else if (password.value === typed) shake('パスワードが違います');
+    else shake('パスワードが違います');
   });
 
   window.addEventListener('resize', layout);

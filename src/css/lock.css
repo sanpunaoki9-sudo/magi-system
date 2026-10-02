@@ -60,10 +60,6 @@
   font-weight: 700;
 }
 
-.lock-input:focus {
-  border-color: var(--pink);
-}
-
 .lock-error {
   min-height: 18px;
   font-size: 13px;
