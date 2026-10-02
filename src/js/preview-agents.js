@@ -19,6 +19,7 @@ export function createAgentPreview() {
 
   const jobs = new Map();
   const groups = new Map();
+  const talkSettings = { model: 'onnx-community/whisper-small', engine: 'windows', voice: '', rate: 1.05, pitch: 1.1, speaker: 2, autoListen: false };
   const addJob = (job) => jobs.set(job.id, { attempts: 1, output: [], createdAt: Date.now(), ...job });
   addJob({ id: 'j1', agentId: 'claude-code', title: 'ログイン画面のテストを書く', status: 'waiting-quota', resumeAt: quotas['claude-code'].resetAt, branch: 'oz/claude-code', output: ['Claude Code が作業を始めました（oz/claude-code）', 'Claude usage limit reached', '利用枠の上限に達しました。自動で再開します'], createdAt: now - 40 * 60000 });
   addJob({ id: 'j2', agentId: 'codex', title: 'ログインAPIを実装する', status: 'done', branch: 'oz/codex', commit: { hash: 'a1b2c3d', files: [] }, createdAt: now - 3 * 3600000 });
@@ -196,6 +197,38 @@ export function createAgentPreview() {
     workspace: {
       async open() {
         return { ok: false };
+      },
+    },
+    talk: {
+      async getSettings() {
+        return { ...talkSettings, preview: true };
+      },
+      async setSettings(patch) {
+        Object.assign(talkSettings, patch);
+        return { ...talkSettings };
+      },
+      async ask({ text }) {
+        await new Promise((r) => setTimeout(r, 700));
+        if (/頼んで|お願い/.test(text) && /codex|コーデックス/i.test(text)) {
+          return { reply: 'Codexに頼みました。終わったらお知らせします。（サンプル）', action: { type: 'delegate', agentId: 'codex' } };
+        }
+        if (/ニュース/.test(text)) return { reply: '新しいニュースを3件お伝えします。これはプレビュー用のサンプルです。', action: { type: 'news' } };
+        if (/(PC|パソコン)/i.test(text)) return { reply: 'CPUは18パーセント、メモリは46パーセント使っています。（サンプル）', action: { type: 'system' } };
+        return { reply: 'プレビューなので、決まった文面でお返事しています。アプリでは Claude Code が答えます。' };
+      },
+      async voicevox() {
+        return { available: false };
+      },
+    },
+    speech: {
+      async models() {
+        return [
+          { id: 'onnx-community/whisper-small', label: '高精度（small・約250MB）', installed: false },
+          { id: 'onnx-community/whisper-base', label: '軽量（base・約80MB）', installed: false },
+        ];
+      },
+      async download() {
+        return { error: 'プレビューではダウンロードできません' };
       },
     },
   };

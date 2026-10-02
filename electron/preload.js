@@ -74,5 +74,18 @@ contextBridge.exposeInMainWorld('oz', {
   workspace: {
     open: invoke('workspace:open'),
   },
+  talk: {
+    ask: invoke('talk:ask'),
+    voicevox: invoke('talk:voicevox'),
+    synthesize: invoke('talk:synthesize'),
+    getSettings: invoke('talk:getSettings'),
+    setSettings: invoke('talk:setSettings'),
+  },
+  speech: {
+    models: invoke('speech:models'),
+    download: invoke('speech:download'),
+    remove: invoke('speech:remove'),
+    onProgress: listen('speech:progress'),
+  },
   openExternal: invoke('open-external'),
 });

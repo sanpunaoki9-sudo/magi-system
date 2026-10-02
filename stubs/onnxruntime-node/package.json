@@ -1,0 +1,7 @@
+{
+  "name": "onnxruntime-node",
+  "version": "0.0.0-oz-stub",
+  "description": "OZ Assistant では音声認識をブラウザ版（onnxruntime-web）で動かすため、ネイティブ版は使わない。インストール時の大きなダウンロードを避けるための空のパッケージ。",
+  "main": "index.js",
+  "license": "MIT"
+}

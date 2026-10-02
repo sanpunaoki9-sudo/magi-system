@@ -228,6 +228,20 @@ function createVault({ getConfig, setConfig }) {
     return { path: toPosix(path.relative(root, file)), name: path.basename(file, '.md') };
   }
 
+  // ノートに追記する（なければ header から作る）。会話ログのように1日1ノートへ書き足す用途
+  function appendNote({ title, text, header = '', folder = OZ_FOLDER } = {}) {
+    const root = requireVault();
+    const dir = path.resolve(root, safeFolder(folder));
+    if (dir !== root && !dir.startsWith(root + path.sep)) throw new Error('保管庫の外には保存できません');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, `${safeFileName(title)}.md`);
+    if (!fs.existsSync(file)) {
+      fs.writeFileSync(file, `---\ncreated: ${new Date().toISOString()}\nsource: oz-assistant\n---\n\n${header}`, 'utf8');
+    }
+    fs.appendFileSync(file, String(text), 'utf8');
+    return { path: toPosix(path.relative(root, file)) };
+  }
+
   // まとめ役のノート（例: AIニュース）がなければ作る
   function ensureHub(name, description) {
     const root = requireVault();
@@ -288,7 +302,7 @@ function createVault({ getConfig, setConfig }) {
     watcher = null;
   }
 
-  return { info, choose, graph, addNote, ensureHub, saveNews, obsidianUrl, watch, unwatch };
+  return { info, choose, graph, addNote, appendNote, ensureHub, saveNews, obsidianUrl, watch, unwatch };
 }
 
 module.exports = { createVault, buildGraph, safeFileName };

@@ -1,4 +1,4 @@
-// 丸タブごとのパネルの中身。ここにないタブは「COMING NEXT」の表示になる
+// 丸タブごとのパネルの中身
 import { createSystemModule } from './system.js';
 import { createNewsModule } from './news.js';
 import { createRankingModule } from './ranking.js';
@@ -8,6 +8,7 @@ import { createCommandModule } from './command.js';
 import { createAgentsModule } from './agents.js';
 import { createQuotaModule } from './quota.js';
 import { createSettingsModule } from './settings.js';
+import { createTalkModule } from './talk.js';
 
 export function createModules(oz) {
   return {
@@ -20,5 +21,6 @@ export function createModules(oz) {
     agents: createAgentsModule(oz),
     quota: createQuotaModule(oz),
     settings: createSettingsModule(oz),
+    talk: createTalkModule(oz),
   };
 }

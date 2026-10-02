@@ -1,7 +1,7 @@
 {
   "name": "oz-assistant",
   "productName": "OZ Assistant",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "OZ-style personal AI assistant for Windows",
   "main": "electron/main.js",
   "private": true,
@@ -17,6 +17,7 @@
       "electron/**",
       "src/**",
       "node_modules/**",
+      "stubs/**",
       "package.json"
     ],
     "win": {
@@ -32,9 +33,11 @@
   },
   "dependencies": {
     "3d-force-graph": "^1.80.1",
+    "@huggingface/transformers": "^4.3.0",
     "d3-geo": "^3.1.1",
     "fast-xml-parser": "^5.11.2",
     "node-html-parser": "^9.0.4",
+    "onnxruntime-node": "file:stubs/onnxruntime-node",
     "systeminformation": "^5.33.15",
     "three": "^0.186.1",
     "topojson-client": "^3.1.0",
@@ -43,5 +46,8 @@
   "devDependencies": {
     "electron": "^44.5.1",
     "electron-builder": "^26.15.3"
+  },
+  "overrides": {
+    "onnxruntime-node": "$onnxruntime-node"
   }
 }

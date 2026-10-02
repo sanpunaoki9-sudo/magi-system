@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, dialog, ipcMain, net, protocol, shell } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, net, protocol, session, shell } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 const config = require('./config');
@@ -10,9 +10,25 @@ const { createNews } = require('./services/news');
 const { createGithub } = require('./services/github');
 const { createVault } = require('./services/vault');
 const { registerDevIpc } = require('./ipc-dev');
+const { createSpeechModels } = require('./services/speech-models');
 
 const APP_ROOT = path.join(__dirname, '..');
 const SCHEME = 'app';
+let speechModels = null;
+
+// SharedArrayBuffer（音声認識を複数スレッドで動かすのに必要）を使えるようにする見出し
+const ISOLATION_HEADERS = {
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'require-corp',
+  'Cross-Origin-Resource-Policy': 'same-origin',
+};
+
+async function withIsolation(responsePromise) {
+  const res = await responsePromise;
+  const headers = new Headers(res.headers);
+  for (const [key, value] of Object.entries(ISOLATION_HEADERS)) headers.set(key, value);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
 
 // app:// を正規のオリジンとして扱い、ES Modules と fetch をそのまま使えるようにする
 protocol.registerSchemesAsPrivileged([
@@ -22,11 +38,17 @@ protocol.registerSchemesAsPrivileged([
 function registerAppProtocol() {
   protocol.handle(SCHEME, (request) => {
     const { pathname } = new URL(request.url);
+    // 音声認識のモデルは userData に保存しているので、そこから返す
+    if (pathname.startsWith('/models/')) {
+      const modelFile = speechModels?.resolve(pathname.slice('/models/'.length));
+      if (!modelFile) return new Response('Not found', { status: 404 });
+      return withIsolation(net.fetch(pathToFileURL(modelFile).toString()));
+    }
     const filePath = path.normalize(path.join(APP_ROOT, decodeURIComponent(pathname)));
     if (!filePath.startsWith(APP_ROOT + path.sep)) {
       return new Response('Forbidden', { status: 403 });
     }
-    return net.fetch(pathToFileURL(filePath).toString());
+    return withIsolation(net.fetch(pathToFileURL(filePath).toString()));
   });
 }
 
@@ -142,11 +164,27 @@ function registerIpc() {
 
   handle('open-external', (url) => ({ ok: openExternal(String(url)) }));
 
-  dev = registerDevIpc({ handle, broadcast, openExternal, vault, fetch: net.fetch });
+  dev = registerDevIpc({ handle, broadcast, openExternal, vault, news, speechModels, fetch: net.fetch });
+}
+
+// マイクは話しかけモードのために、このアプリの画面にだけ許可する
+function registerPermissions() {
+  const allowed = new Set(['media', 'speaker-selection']);
+  const fromApp = (url) => String(url ?? '').startsWith(`${SCHEME}://oz/`);
+  session.defaultSession.setPermissionRequestHandler((wc, permission, callback, details) => {
+    callback(allowed.has(permission) && fromApp(details.requestingUrl ?? wc.getURL()));
+  });
+  session.defaultSession.setPermissionCheckHandler((wc, permission, origin) => allowed.has(permission) && fromApp(`${origin}/`));
 }
 
 app.whenReady().then(() => {
   config.init(app.getPath('userData'));
+  speechModels = createSpeechModels({
+    fetch: net.fetch,
+    dataDir: app.getPath('userData'),
+    onProgress: (p) => broadcast('speech:progress', p),
+  });
+  registerPermissions();
   registerAppProtocol();
   registerIpc();
   createWindow();

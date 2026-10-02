@@ -11,6 +11,8 @@ const { createQuota } = require('./services/quota');
 const { createAgents } = require('./services/agents');
 const { createRunner } = require('./services/runner');
 const { createPlanner } = require('./services/planner');
+const { createTalk } = require('./services/talk');
+const system = require('./services/system');
 
 const QUOTA_POLL_MS = 60000;
 
@@ -29,7 +31,21 @@ function devConfig() {
   return { autoMerge: true, ...dev };
 }
 
-function registerDevIpc({ handle, broadcast, openExternal, vault, fetch }) {
+const TALK_DEFAULTS = {
+  model: 'onnx-community/whisper-small',
+  engine: 'windows', // windows: Windows の音声 / voicevox: VOICEVOX
+  voice: '',
+  rate: 1.05,
+  pitch: 1.1,
+  speaker: 2,
+  autoListen: false,
+};
+
+function talkConfig() {
+  return { ...TALK_DEFAULTS, ...(config.get('talk') ?? {}) };
+}
+
+function registerDevIpc({ handle, broadcast, openExternal, vault, news, speechModels, fetch }) {
   const userData = app.getPath('userData');
   const git = createGit({ getConfig: devConfig });
   const quota = createQuota();
@@ -183,6 +199,47 @@ function registerDevIpc({ handle, broadcast, openExternal, vault, fetch }) {
   });
 
   handle('workspace:open', () => ({ ok: agents.openInVSCode(git.root()) }));
+
+  // ---------- 話しかけモード ----------
+
+  const talk = createTalk({
+    agents,
+    quota,
+    runner,
+    planner,
+    news,
+    system,
+    vault,
+    dataDir: userData,
+    fetch,
+    getSettings: devConfig,
+  });
+
+  handle('talk:ask', ({ text, history } = {}) => {
+    const safeHistory = (Array.isArray(history) ? history : [])
+      .slice(-12)
+      .map((h) => ({ role: h?.role === 'user' ? 'user' : 'oz', text: String(h?.text ?? '').slice(0, 1000) }));
+    return talk.ask({ text: String(text ?? ''), history: safeHistory });
+  });
+  handle('talk:voicevox', () => talk.voicevoxStatus());
+  handle('talk:synthesize', ({ text, speaker } = {}) => talk.synthesize({ text, speaker }));
+  handle('talk:getSettings', () => talkConfig());
+  handle('talk:setSettings', (patch = {}) => {
+    const next = talkConfig();
+    if (speechModels.MODELS.some((m) => m.id === patch.model)) next.model = patch.model;
+    if (patch.engine === 'windows' || patch.engine === 'voicevox') next.engine = patch.engine;
+    if (typeof patch.voice === 'string') next.voice = patch.voice.slice(0, 200);
+    if (Number.isFinite(patch.rate)) next.rate = Math.min(Math.max(patch.rate, 0.5), 2);
+    if (Number.isFinite(patch.pitch)) next.pitch = Math.min(Math.max(patch.pitch, 0.5), 2);
+    if (Number.isInteger(patch.speaker)) next.speaker = patch.speaker;
+    if (typeof patch.autoListen === 'boolean') next.autoListen = patch.autoListen;
+    config.set('talk', next);
+    return next;
+  });
+
+  handle('speech:models', () => speechModels.list());
+  handle('speech:download', (id) => speechModels.download(String(id)));
+  handle('speech:remove', (id) => speechModels.remove(String(id)));
 
   return { getGithubToken: () => secrets.getSecret('githubToken') };
 }
