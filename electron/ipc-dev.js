@@ -76,6 +76,7 @@ function registerDevIpc({ handle, broadcast, openExternal, vault, news, speechMo
   };
 
   const runner = createRunner({
+    getAutoMerge: () => devConfig().autoMerge !== false,
     agents,
     git,
     quota,

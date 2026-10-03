@@ -32,7 +32,8 @@ function killTree(child) {
   }
 }
 
-function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, spawnImpl = spawn }) {
+// getAutoMerge: 1人に頼んだ作業も、終わったらまとめ先へ自動で統合するか
+function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, getAutoMerge = () => true, spawnImpl = spawn }) {
   const file = path.join(dataDir, 'oz-jobs.json');
   const jobs = new Map();
   const groups = new Map();
@@ -81,6 +82,56 @@ function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, spaw
     save();
     onJob?.(publicJob(job));
     if (job.groupId) checkGroup(job.groupId);
+    else if (job.status === 'done' && !job.mergeState) mergeDirect(job);
+    else if (job.kind === 'resolve' && job.parentJobId && ['failed', 'cancelled'].includes(job.status)) {
+      // 衝突の解決に失敗したら、元の依頼は「衝突あり」のまま残す
+      const parent = jobs.get(job.parentJobId);
+      if (parent?.mergeState === 'resolving') {
+        parent.mergeState = 'conflict';
+        save();
+        onJob?.(publicJob(parent));
+      }
+    }
+  }
+
+  // 1人に頼んだ作業を、まとめ先へ統合する。衝突したら Claude Code に解決を頼み、終わったらもう一度統合する
+  async function mergeDirect(job) {
+    const parent = job.kind === 'resolve' ? jobs.get(job.parentJobId) : null;
+    if (job.kind === 'resolve' && !parent) return;
+    const target = parent ?? job;
+    if (!parent && !getAutoMerge()) {
+      job.mergeState = 'off';
+      save();
+      return;
+    }
+    job.mergeState = 'merging';
+    target.mergeState = 'merging';
+    onJob?.(publicJob(target));
+    try {
+      const result = await git.mergeAgents([target.worktreeOf]);
+      target.merge = result;
+      target.mergeError = null;
+      if (result.conflicts.length && !parent) {
+        target.mergeState = 'resolving';
+        const name = agents.byId(target.agentId)?.name ?? target.agentId;
+        submit({
+          agentId: 'claude-code',
+          worktreeOf: target.worktreeOf,
+          kind: 'resolve',
+          parentJobId: target.id,
+          title: `${name} の作業の衝突を解決`,
+          prompt: `このフォルダでは、まとめ先のブランチを取り込んだときに衝突が起きています。両方の変更の意図を保つように衝突マーカー（<<<<<<< ======= >>>>>>>）を解消してください。元の依頼: ${target.prompt}`,
+        });
+      } else {
+        target.mergeState = result.conflicts.length ? 'conflict' : 'merged';
+      }
+    } catch (err) {
+      target.mergeState = 'failed';
+      target.mergeError = err.message;
+    }
+    if (parent) job.mergeState = 'done';
+    save();
+    onJob?.(publicJob(target));
   }
 
   // fromAgent: エージェントの出力のときだけ、利用枠の上限の文言を調べる（アプリ自身のメッセージは調べない）
@@ -96,7 +147,7 @@ function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, spaw
 
   // ---------- 依頼の受付 ----------
 
-  function submit({ agentId, prompt, title, groupId = null, worktreeOf = null, kind = 'task' }) {
+  function submit({ agentId, prompt, title, groupId = null, worktreeOf = null, kind = 'task', parentJobId = null }) {
     const agent = agents.byId(agentId);
     if (!agent) throw new Error('知らないエージェントです');
     if (!String(prompt ?? '').trim()) throw new Error('依頼の内容が空です');
@@ -108,6 +159,7 @@ function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, spaw
       title: String(title || prompt).split('\n')[0].slice(0, 80),
       prompt: String(prompt),
       groupId,
+      parentJobId,
       status: 'queued',
       attempts: 0,
       resume: false,

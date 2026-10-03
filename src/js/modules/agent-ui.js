@@ -51,6 +51,19 @@ export function formatCountdown(ms) {
   return hours > 0 ? `あと${hours}時間${mins}分` : `あと${mins}分`;
 }
 
+// 1人に頼んだ作業の、まとめ先への統合
+function mergeText(job) {
+  const base = job.merge?.base ?? 'main';
+  switch (job.mergeState) {
+    case 'merging': return { text: `${base} に統合しています`, tone: 'muted' };
+    case 'merged': return { text: `${base} に統合済み`, tone: 'muted' };
+    case 'resolving': return { text: `${base} と衝突したため、Claude Code が解決しています`, tone: 'muted' };
+    case 'conflict': return { text: `${base} と衝突しています（${job.merge?.conflicts?.[0]?.files?.join('、') || 'ファイル'}）。AGENTS で確認してください`, tone: 'error' };
+    case 'failed': return { text: `統合に失敗しました: ${job.mergeError ?? ''}`, tone: 'error' };
+    default: return null;
+  }
+}
+
 // 依頼1件の行。操作ボタンは状態に応じて出す
 export function jobRow(job, oz, { onChange } = {}) {
   const act = (fn, label, primary = false) =>
@@ -88,6 +101,10 @@ export function jobRow(job, oz, { onChange } = {}) {
     h('p', { class: 'job-title' }, job.title),
     detail ? h('p', { class: 'job-detail muted' }, detail) : null,
     job.error && job.status === 'failed' ? h('p', { class: 'job-error' }, job.error) : null,
+    (() => {
+      const m = !job.groupId && job.status === 'done' ? mergeText(job) : null;
+      return m ? h('p', { class: m.tone === 'error' ? 'job-error' : 'job-detail muted' }, m.text) : null;
+    })(),
     job.output?.length
       ? h('details', { class: 'job-output' }, h('summary', {}, '出力を見る'), h('pre', {}, job.output.slice(-40).join('\n')))
       : null,

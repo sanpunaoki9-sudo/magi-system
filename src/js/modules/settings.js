@@ -90,7 +90,7 @@ export function createSettingsModule(oz) {
         form.replaceChildren(
           section('作業フォルダ', 'エージェントが作業するフォルダです。Git で管理し、エージェントごとの作業場所は .oz-worktrees に作ります。', ws, h('div', { class: 'toolbar-group' }, chooseWs, openWs)),
           section('Git', 'コミットに記録する名前とメールアドレスです。', name, email, h('div', { class: 'toolbar-group' }, saveGit)),
-          section('分担後の自動統合', '指令室で分担した作業が全員終わったら、まとめ先のブランチに自動で統合します。衝突は Claude Code に解決を頼みます。',
+          section('作業後の自動統合', '1人に頼んだ作業は終わったとき、分担した作業は全員が終わったときに、まとめ先のブランチへ自動で統合します。衝突は Claude Code に解決を頼みます。',
             h('label', { class: 'switch', for: 'autoMerge' }, auto, h('span', {}, '自動で統合する'))),
           section('GitHub のトークン', 'GitHub ランキングの取得回数の上限を上げます。Windows の暗号化で保護して保存します。', token, h('div', { class: 'toolbar-group' }, saveToken, s.githubToken ? clearToken : null)),
           section('Obsidian の保管庫', 'グラフビューと作業ログの保存先です。', vaultName, h('div', { class: 'toolbar-group' }, chooseVault)),

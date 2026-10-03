@@ -119,7 +119,8 @@ test('依頼: 利用枠の上限で途中まで保存して待ち、回復した
     const agents = createAgents({ openExternal: () => true });
     const vault = { ensureHub() {}, addNote() {}, appendNote() {} };
     const data = path.join(dir, 'data');
-    let runner = createRunner({ agents, git, quota, vault, dataDir: data });
+    // 1人に頼んだ作業はここでは統合しない（後の分担で衝突の解決まで確かめるため）
+    let runner = createRunner({ agents, git, quota, vault, dataDir: data, getAutoMerge: () => false });
     runner.startLoop();
 
     // 利用枠の上限
@@ -131,7 +132,7 @@ test('依頼: 利用枠の上限で途中まで保存して待ち、回復した
 
     // アプリを再起動しても待ちは残る
     runner.stopAll();
-    runner = createRunner({ agents, git, quota, vault, dataDir: data });
+    runner = createRunner({ agents, git, quota, vault, dataDir: data, getAutoMerge: () => false });
     runner.startLoop();
     assert.equal(runner.get(job.id).status, 'waiting-quota');
 
@@ -351,6 +352,47 @@ test('分担: 新しい作業フォルダで3人が同時に始めてもぶつ�
     assert.equal(groupNow().status, 'merged', JSON.stringify(groupNow()));
     assert.deepEqual(groupNow().failedAgents, []);
     assert.ok(fs.existsSync(path.join(ws, 'api.txt')));
+    runner.stopAll();
+  } finally {
+    process.env.PATH = oldPath;
+  }
+});
+
+test('1人に頼んだ作業も、終わったら自動で統合する。衝突したら Claude Code が解決してから統合する。設定でオフにできる', { skip: !POSIX, timeout: 120000 }, async () => {
+  const dir = tmp('direct');
+  const bin = fakeCli(dir);
+  const oldPath = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${oldPath}`;
+  process.env.FAKE_DIR = dir;
+  const ws = path.join(dir, 'ws');
+  fs.mkdirSync(ws);
+  try {
+    let autoMerge = true;
+    const git = createGit({ getConfig: () => ({ workspace: ws }) });
+    const agents = createAgents({ openExternal: () => true });
+    const runner = createRunner({ agents, git, quota: createQuota(), vault: { ensureHub() {}, addNote() {}, appendNote() {} }, dataDir: path.join(dir, 'data'), getAutoMerge: () => autoMerge });
+    runner.startLoop();
+
+    // 2人に同時に頼む。どちらも shared.txt を書くので、後に終わった方が衝突する
+    const a = runner.submit({ agentId: 'claude-code', prompt: '画面を作る' });
+    const b = runner.submit({ agentId: 'codex', prompt: 'API を作る' });
+    await until(() => [a, b].every((j) => ['merged', 'conflict', 'failed'].includes(runner.get(j.id).mergeState)), 60000);
+    assert.equal(runner.get(a.id).mergeState, 'merged', JSON.stringify(runner.get(a.id)));
+    assert.equal(runner.get(b.id).mergeState, 'merged', JSON.stringify(runner.get(b.id)));
+    const resolve = runner.list().find((j) => j.kind === 'resolve');
+    assert.ok(resolve && [a.id, b.id].includes(resolve.parentJobId));
+    assert.equal(fs.readFileSync(path.join(ws, 'shared.txt'), 'utf8').trim(), 'merged by claude');
+    assert.ok(fs.existsSync(path.join(ws, 'ui.txt')) && fs.existsSync(path.join(ws, 'api.txt')));
+
+    // オフなら統合しない（専用ブランチに残す）
+    autoMerge = false;
+    fs.rmSync(path.join(ws, 'api.txt'));
+    await git.commitAll(ws, 'remove api');
+    const c = runner.submit({ agentId: 'codex', prompt: 'もう一度 API を作る' });
+    await until(() => runner.get(c.id).status === 'done');
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(runner.get(c.id).mergeState, 'off');
+    assert.ok(!fs.existsSync(path.join(ws, 'api.txt')));
     runner.stopAll();
   } finally {
     process.env.PATH = oldPath;
