@@ -82,6 +82,7 @@ function fakeCli(dir) {
   fs.mkdirSync(bin);
   fs.writeFileSync(path.join(bin, 'claude'), `#!/usr/bin/env bash
 if [ "$1" = "--version" ]; then echo "fake-claude 1.0"; exit 0; fi
+if [ "$1" = "--help" ]; then printf '  --model <model>\\n  --effort <level>\\n'; exit 0; fi
 prompt=$(cat)
 if [ -f "$FAKE_DIR/claude-limit" ]; then echo "Claude usage limit reached. Try again in 0h 1m" >&2; echo partial > partial.txt; exit 1; fi
 if echo "$prompt" | grep -q "司令塔"; then echo '[{"agentId":"claude-code","task":"画面を作る"},{"agentId":"codex","task":"APIを作る"}]'; exit 0; fi
@@ -91,6 +92,7 @@ echo ui > ui.txt; echo "from claude" > shared.txt; echo done
 `, { mode: 0o755 });
   fs.writeFileSync(path.join(bin, 'codex'), `#!/usr/bin/env bash
 if [ "$1" = "--version" ]; then echo "fake-codex 0.1"; exit 0; fi
+if [ "$1" = "--help" ]; then printf '  -m, --model <MODEL>\\n  -c, --config <key=value>\\n'; exit 0; fi
 cat > /dev/null
 echo api > api.txt; echo "from codex" > shared.txt; echo done
 `, { mode: 0o755 });
@@ -159,7 +161,8 @@ function fakeAgy(bin) {
   fs.writeFileSync(path.join(bin, 'agy'), `#!/usr/bin/env bash
 case "$1" in
   --version) echo "agy 1.2.3"; exit 0 ;;
-  --help) printf 'Usage: agy [flags]\\n  -p, --prompt string\\n  --dangerously-skip-permissions\\n'; exit 0 ;;
+  --help) printf 'Usage: agy [flags]\\n  -p, --prompt string\\n  --model string\\n  --dangerously-skip-permissions\\n'; exit 0 ;;
+  models) printf 'Available models:\\n  gemini-3.5-flash   (default)\\n  gemini-3.5-pro-high\\n'; exit 0 ;;
 esac
 if [ "$1" = "-p" ]; then
   shift; prompt="$1"; shift
@@ -256,5 +259,50 @@ test('PATH に無くても、よくあるインストール先から見つける
     process.env.HOME = oldHome;
     process.env.PATH = oldPath;
     delete require.cache[modPath];
+  }
+});
+
+test('モデルとエフォート: CLI が対応している指定だけを、各 CLI の書き方で付ける。危ない文字は通さない', { skip: !POSIX }, async () => {
+  const dir = tmp('model');
+  const bin = fakeCli(dir);
+  fakeAgy(bin);
+  const oldPath = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${oldPath}`;
+  try {
+    const { cleanAgentSettings } = require('../electron/services/agents');
+    const settings = {
+      'claude-code': cleanAgentSettings('claude-code', { model: 'opus', effort: 'xhigh' }),
+      codex: cleanAgentSettings('codex', { model: 'gpt-5.4', effort: 'high' }),
+      antigravity: cleanAgentSettings('antigravity', { model: 'gemini-3.5-pro-high' }),
+    };
+    const agents = createAgents({ openExternal: () => true, getSettings: (id) => settings[id] });
+    const found = Object.fromEntries((await agents.detect({ force: true })).agents.map((a) => [a.id, a]));
+    assert.deepEqual(found['claude-code'].supports, { model: true, effort: true });
+    assert.deepEqual(found.antigravity.supports, { model: true, effort: false });
+    // agy は「agy models」の一覧を候補にする
+    assert.deepEqual(found.antigravity.models, ['gemini-3.5-flash', 'gemini-3.5-pro-high']);
+
+    const claude = await agents.invocation('claude-code', { mode: 'task', prompt: 'x', cwd: dir });
+    assert.deepEqual(claude.args, ['-p', '--output-format', 'text', '--permission-mode', 'acceptEdits', '--model', 'opus', '--effort', 'xhigh']);
+    const plan = await agents.invocation('claude-code', { mode: 'plan', prompt: 'x', cwd: dir });
+    assert.deepEqual(plan.args, ['-p', '--output-format', 'text', '--model', 'opus', '--effort', 'xhigh']);
+    // Codex は「-」（標準入力から読む印）より前に入れる
+    const codex = await agents.invocation('codex', { mode: 'task', prompt: 'x', cwd: dir });
+    assert.deepEqual(codex.args, ['exec', '--full-auto', '-m', 'gpt-5.4', '-c', 'model_reasoning_effort=high', '-']);
+    const agy = await agents.invocation('antigravity', { mode: 'task', prompt: 'x', cwd: dir });
+    assert.deepEqual(agy.args, ['-p', 'x', '--dangerously-skip-permissions', '--model', 'gemini-3.5-pro-high']);
+
+    // 空なら CLI の設定のまま（何も付けない）
+    settings['claude-code'] = cleanAgentSettings('claude-code', {});
+    assert.deepEqual((await agents.invocation('claude-code', { mode: 'chat', prompt: 'x', cwd: dir })).args, ['-p', '--output-format', 'text']);
+
+    // シェルの記号や、そのエージェントにないエフォートは保存できない
+    assert.throws(() => cleanAgentSettings('codex', { model: 'gpt & calc' }));
+    assert.throws(() => cleanAgentSettings('codex', { model: '"opus"' }));
+    assert.throws(() => cleanAgentSettings('codex', { effort: 'max' }));
+    assert.throws(() => cleanAgentSettings('antigravity', { effort: 'high' }));
+    assert.throws(() => cleanAgentSettings('unknown', {}));
+  } finally {
+    process.env.PATH = oldPath;
   }
 });

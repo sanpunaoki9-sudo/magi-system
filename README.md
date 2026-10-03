@@ -78,6 +78,11 @@ npm run dev:web
 - Claude Code は `claude -p`、Codex は `codex exec --full-auto` で動かします。依頼の文面は標準入力で渡します。
 - Antigravity は CLI の `agy -p` で動かします（`--help` に載っていれば `--dangerously-skip-permissions` と `--sandbox` も付けます）。依頼が長いときは `OZ_TASK.md` に書いて、それを読んで作業するよう頼みます。
 - `agy` がなくエディタだけあるときは、依頼を `OZ_TASK.md` に書いて作業場所を Antigravity で開きます。終わったら「完了にする」を押すと変更を保存します。
+- **モデルとエフォート**は LAUNCH の各カードでエージェントごとに選べます（空なら各 CLI の設定のまま）。指令室の依頼・分担の司令塔・話しかけモード・単体起動のすべてで使われます。
+  - Claude Code: `--model`（fable / opus / sonnet / haiku など）と `--effort`（low〜max）
+  - Codex: `-m` と `-c model_reasoning_effort=…`（minimal〜xhigh）
+  - Antigravity: `--model`（エフォートはモデル名に含まれる。候補は `agy models` の一覧）
+  - 入っている CLI の `--help` に載っていない指定は付けません。モデル名は英数字と `. _ - : / [ ]` だけ使えます（コマンドとして解釈される記号は通しません）。
 - 作業が終わると自動でコミットし、Obsidian の `OZ/作業ログ` に記録を残します。
 - 分担した作業が全員終わると、まとめ先のブランチ（main など）に自動で統合します。衝突したときは Claude Code に解決を頼んでから、もう一度統合します。
 

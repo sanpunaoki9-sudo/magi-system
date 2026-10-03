@@ -8,7 +8,7 @@ const config = require('./config');
 const secrets = require('./secrets');
 const { createGit } = require('./services/git');
 const { createQuota } = require('./services/quota');
-const { createAgents } = require('./services/agents');
+const { createAgents, cleanAgentSettings } = require('./services/agents');
 const { createRunner } = require('./services/runner');
 const { createPlanner } = require('./services/planner');
 const { createTalk } = require('./services/talk');
@@ -49,7 +49,9 @@ function registerDevIpc({ handle, broadcast, openExternal, vault, news, speechMo
   const userData = app.getPath('userData');
   const git = createGit({ getConfig: devConfig });
   const quota = createQuota();
-  const agents = createAgents({ openExternal });
+  // エージェントごとのモデルとエフォート（空なら各 CLI の設定のまま）
+  const agentSettings = (agentId) => (config.get('agentSettings') ?? {})[agentId] ?? {};
+  const agents = createAgents({ openExternal, getSettings: agentSettings });
   // 依頼の状態が変わったら Windows の通知で知らせる
   const lastStatus = new Map();
   const NOTIFY = {
@@ -112,6 +114,13 @@ function registerDevIpc({ handle, broadcast, openExternal, vault, news, speechMo
       })),
       tools: detected.tools,
     };
+  });
+
+  // モデルとエフォートを変える。次の依頼・会話・単体起動から使われる
+  handle('agents:configure', ({ agentId, model, effort } = {}) => {
+    const clean = cleanAgentSettings(String(agentId), { model, effort });
+    config.set('agentSettings', { ...(config.get('agentSettings') ?? {}), [agentId]: clean });
+    return { ok: true, settings: clean };
   });
 
   // 単体起動: そのエージェント専用の作業場所を用意して開く

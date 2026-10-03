@@ -1197,3 +1197,32 @@ details.notice ul {
   font-size: 11px;
   overflow-wrap: anywhere;
 }
+
+/* モデルとエフォート */
+.agent-model {
+  display: grid;
+  gap: 6px;
+  padding: 10px 0 2px;
+  border-top: 1px solid var(--line);
+}
+
+.agent-model-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.agent-model-row .field,
+.agent-model-row .select {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 12px;
+  font-size: 13px;
+  background: var(--surface);
+}
+
+.agent-model-save {
+  justify-content: flex-end;
+}

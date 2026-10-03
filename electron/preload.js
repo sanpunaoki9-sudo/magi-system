@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('oz', {
     list: invoke('agents:list'),
     launch: invoke('agents:launch'),
     install: invoke('agents:install'),
+    configure: invoke('agents:configure'),
     services: invoke('agents:services'),
   },
   jobs: {

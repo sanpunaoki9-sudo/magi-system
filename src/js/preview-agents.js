@@ -1,8 +1,11 @@
 // ブラウザで画面を確認するときの、エージェント関連のサンプル（Electron では使わない）
 const AGENTS = [
-  { id: 'claude-code', name: 'Claude Code', vendor: 'Anthropic', kind: 'cli', strengths: '設計・レビュー・テスト・複雑な変更', npmPackage: '@anthropic-ai/claude-code', vscodeExtension: 'anthropic.claude-code', installed: true, headless: true, cli: { path: 'C:\\Users\\you\\.local\\bin\\claude.exe', version: 'サンプル 2.0', source: 'PATH' }, ide: null, hasIde: false },
-  { id: 'codex', name: 'Codex', vendor: 'OpenAI', kind: 'cli', strengths: '処理の実装・API・スクリプト', npmPackage: '@openai/codex', vscodeExtension: 'openai.chatgpt', installed: true, headless: true, cli: { path: 'C:\\Users\\you\\AppData\\Roaming\\npm\\codex.cmd', version: 'サンプル 0.9', source: 'PATH' }, ide: null, hasIde: false },
-  { id: 'antigravity', name: 'Antigravity', vendor: 'Google', kind: 'app', strengths: '画面・UI・ブラウザでの確認', downloadUrl: 'https://antigravity.google/download', installUrl: 'https://antigravity.google/docs/cli', installed: true, headless: true, cli: { path: 'C:\\Users\\you\\AppData\\Local\\agy\\bin\\agy.exe', version: 'サンプル 1.2', source: 'インストール先' }, ide: { path: 'C:\\Users\\you\\AppData\\Local\\Programs\\Antigravity\\Antigravity.exe', source: 'インストール先' }, hasIde: true },
+  { id: 'claude-code', name: 'Claude Code', vendor: 'Anthropic', kind: 'cli', strengths: '設計・レビュー・テスト・複雑な変更', npmPackage: '@anthropic-ai/claude-code', vscodeExtension: 'anthropic.claude-code', installed: true, headless: true, cli: { path: 'C:\\Users\\you\\.local\\bin\\claude.exe', version: 'サンプル 2.0', source: 'PATH' }, ide: null, hasIde: false,
+    options: { model: { placeholder: '例: opus' }, effort: { levels: ['low', 'medium', 'high', 'xhigh', 'max'] } }, supports: { model: true, effort: true }, models: ['fable', 'opus', 'sonnet', 'haiku'], settings: { model: 'opus', effort: 'high' } },
+  { id: 'codex', name: 'Codex', vendor: 'OpenAI', kind: 'cli', strengths: '処理の実装・API・スクリプト', npmPackage: '@openai/codex', vscodeExtension: 'openai.chatgpt', installed: true, headless: true, cli: { path: 'C:\\Users\\you\\AppData\\Roaming\\npm\\codex.cmd', version: 'サンプル 0.9', source: 'PATH' }, ide: null, hasIde: false,
+    options: { model: { placeholder: '例: gpt-5.4' }, effort: { levels: ['minimal', 'low', 'medium', 'high', 'xhigh'] } }, supports: { model: true, effort: true }, models: [], settings: {} },
+  { id: 'antigravity', name: 'Antigravity', vendor: 'Google', kind: 'app', strengths: '画面・UI・ブラウザでの確認', downloadUrl: 'https://antigravity.google/download', installUrl: 'https://antigravity.google/docs/cli', installed: true, headless: true, cli: { path: 'C:\\Users\\you\\AppData\\Local\\agy\\bin\\agy.exe', version: 'サンプル 1.2', source: 'インストール先' }, ide: { path: 'C:\\Users\\you\\AppData\\Local\\Programs\\Antigravity\\Antigravity.exe', source: 'インストール先' }, hasIde: true,
+    options: { model: { placeholder: 'agy models の名前' }, effort: null }, supports: { model: true, effort: false }, models: ['gemini-3.5-flash', 'gemini-3.5-pro-high'], settings: {} },
 ];
 
 export function createAgentPreview() {
@@ -71,6 +74,11 @@ export function createAgentPreview() {
       },
       async install() {
         return { error: 'プレビューではインストールできません' };
+      },
+      async configure({ agentId, model = '', effort = '' }) {
+        const agent = AGENTS.find((a) => a.id === agentId);
+        agent.settings = { model, effort };
+        return { ok: true, settings: agent.settings };
       },
       async services() {
         return { fetchedAt: Date.now(), services: [

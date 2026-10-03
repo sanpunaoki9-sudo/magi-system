@@ -2,6 +2,9 @@
 import { h, notice, loading, openExternal } from '../ui.js';
 import { quotaChip, statusChip } from './agent-ui.js';
 
+// エフォート（考える深さ）の表示名
+const EFFORT_LABEL = { minimal: '最小', low: '低', medium: '中', high: '高', xhigh: 'とても高い', max: '最大' };
+
 export function createLaunchModule(oz) {
   let alive = false;
 
@@ -33,6 +36,51 @@ export function createLaunchModule(oz) {
         if (result?.error) say(result.error, 'error');
         else if (done) say(typeof done === 'function' ? done(result) : done);
         return result;
+      }
+
+      // モデルとエフォート。空なら各 CLI の設定のまま。次の依頼・会話・単体起動から使われる
+      function modelBox(agent) {
+        const { model: modelOpt, effort: effortOpt } = agent.options ?? {};
+        if (!modelOpt && !effortOpt) return null;
+        const s = agent.settings ?? {};
+        const listId = `models-${agent.id}`;
+        const model = h('input', {
+          type: 'text', class: 'field', list: listId, spellcheck: 'false', autocomplete: 'off',
+          placeholder: `${modelOpt?.placeholder ?? ''}（空なら既定）`,
+          'aria-label': `${agent.name} のモデル`,
+        });
+        model.value = s.model ?? '';
+        const options = h('datalist', { id: listId }, ...(agent.models ?? []).map((m) => h('option', { value: m })));
+        const effort = effortOpt
+          ? h('select', { class: 'select', 'aria-label': `${agent.name} のエフォート` },
+            h('option', { value: '' }, '既定'),
+            ...effortOpt.levels.map((l) => h('option', { value: l }, `${EFFORT_LABEL[l] ?? l}（${l}）`)))
+          : null;
+        if (effort) effort.value = s.effort ?? '';
+        const save = h('button', { type: 'button', class: 'btn btn-small' }, '保存');
+        save.addEventListener('click', async () => {
+          const r = await run(save, () => oz.agents.configure({ agentId: agent.id, model: model.value, effort: effort?.value ?? '' }), (res) => {
+            const m = res.settings.model || 'CLI の設定のまま';
+            const e = res.settings.effort ? ` / エフォート ${EFFORT_LABEL[res.settings.effort] ?? res.settings.effort}` : '';
+            return `${agent.name}: モデル ${m}${e}。次の依頼から使います`;
+          });
+          if (r && !r.error) agent.settings = r.settings;
+        });
+
+        // 入っている CLI が対応していない指定は使われないことを知らせる
+        const notes = [];
+        if (agent.cli && modelOpt && agent.supports && !agent.supports.model) notes.push('この版の CLI はモデルの指定に対応していないため、保存しても使われません。');
+        if (agent.cli && effortOpt && agent.supports && !agent.supports.effort) notes.push('この版の CLI はエフォートの指定に対応していないため、保存しても使われません。');
+        if (!effortOpt) notes.push('エフォートはモデル名に含まれます（候補は agy models の一覧）。');
+
+        return h('div', { class: 'agent-model' },
+          h('div', { class: 'agent-model-row' },
+            h('label', { class: 'found-label' }, 'モデル'), model, options,
+          ),
+          effort ? h('div', { class: 'agent-model-row' }, h('label', { class: 'found-label' }, 'エフォート'), effort) : null,
+          h('div', { class: 'agent-model-row agent-model-save' }, save),
+          ...notes.map((n) => h('p', { class: 'muted agent-note' }, n)),
+        );
       }
 
       function card(agent) {
@@ -90,6 +138,7 @@ export function createLaunchModule(oz) {
             where('CLI', agent.cli),
             agent.hasIde ? where('エディタ', agent.ide) : null,
           ),
+          modelBox(agent),
           h('p', { class: 'agent-strengths' }, `得意: ${agent.strengths}`),
           note ? h('p', { class: 'muted agent-note' }, note) : null,
           h('div', { class: 'agent-actions' }, ...actions),

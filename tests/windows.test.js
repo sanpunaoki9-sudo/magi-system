@@ -35,6 +35,8 @@ test('Windows: CLI をいつもの場所と拡張機能の同梱から見つけ�
   fs.writeFileSync(path.join(appData, 'npm', 'codex.cmd'), [
     '@echo off',
     'if "%~1"=="--version" (echo codex-cli 0.0.0-fake& exit /b 0)',
+    'if "%~1"=="--help" (echo   -m, --model ^<MODEL^>& echo   -c, --config ^<key=value^>& exit /b 0)',
+    'echo %*> args.txt',
     'more > prompt.txt',
     'echo export const api = 1;> api.js',
     'echo done',
@@ -64,7 +66,10 @@ test('Windows: CLI をいつもの場所と拡張機能の同梱から見つけ�
     const { createQuota } = require('../electron/services/quota');
     const { createRunner } = require('../electron/services/runner');
 
-    const agents = createAgents({ openExternal: () => true });
+    // モデルとエフォートの指定も .cmd 経由で正しく届くか確かめる
+    const { cleanAgentSettings } = require('../electron/services/agents');
+    const settings = { codex: cleanAgentSettings('codex', { model: 'gpt-5.4', effort: 'high' }) };
+    const agents = createAgents({ openExternal: () => true, getSettings: (id) => settings[id] });
     step('detect');
     const found = Object.fromEntries((await agents.detect({ force: true })).agents.map((a) => [a.id, a]));
     step(JSON.stringify(Object.values(found).map((a) => ({ id: a.id, cli: a.cli, taskFlags: a.taskFlags }))));
@@ -105,6 +110,7 @@ test('Windows: CLI をいつもの場所と拡張機能の同梱から見つけ�
     assert.ok(fs.existsSync(path.join(codexWt, 'api.js')));
     assert.ok(!fs.existsSync(path.join(codexWt, 'hacked.txt')));
     assert.match(fs.readFileSync(path.join(codexWt, 'prompt.txt'), 'utf8'), /echo HACKED/);
+    assert.equal(fs.readFileSync(path.join(codexWt, 'args.txt'), 'utf8').trim(), 'exec --full-auto -m gpt-5.4 -c model_reasoning_effort=high -');
 
     // .exe には引数で渡す。引用符や & がそのまま届けば、node -p が式として実行してファイルを書く
     step('agy job');
