@@ -29,6 +29,15 @@ function run(cwd, args, { allowFail = false } = {}) {
 }
 
 function createGit({ getConfig }) {
+  // 作業フォルダ本体（.git）を書き換える操作は1つずつ行う。
+  // 分担で3人が同時に始めると、初期化や worktree の追加がぶつかる（index.lock / HEAD のロック）
+  let queue = Promise.resolve();
+  function exclusive(fn) {
+    const result = queue.then(fn, fn);
+    queue = result.catch(() => {});
+    return result;
+  }
+
   function root() {
     const dir = getConfig()?.workspace;
     if (!dir || !fs.existsSync(dir)) throw new Error('作業フォルダが設定されていません（設定 → 作業フォルダ）');
@@ -45,7 +54,7 @@ function createGit({ getConfig }) {
   }
 
   // 作業フォルダを Git 管理にする。名前とメール、worktree 置き場の除外設定まで行う
-  async function ensureRepo({ userName, userEmail } = {}) {
+  async function ensureRepoNow({ userName, userEmail } = {}) {
     const dir = root();
     if (!(await isRepo(dir))) {
       await run(dir, ['init']);
@@ -98,10 +107,13 @@ function createGit({ getConfig }) {
     return path.join(root(), WORKTREE_DIR, String(agentId).replace(/[^a-zA-Z0-9_-]/g, ''));
   }
 
+  const ensureRepo = (options) => exclusive(() => ensureRepoNow(options));
+
   // エージェント専用の作業場所を用意し、まとめ先の最新を取り込んでから渡す
-  async function prepareWorktree(agentId) {
+  const prepareWorktree = (agentId) => exclusive(() => prepareWorktreeNow(agentId));
+  async function prepareWorktreeNow(agentId) {
     const dir = root();
-    await ensureRepo();
+    await ensureRepoNow();
     const branch = branchName(agentId);
     const wt = worktreePath(agentId);
     const base = await baseBranch();
@@ -185,7 +197,8 @@ function createGit({ getConfig }) {
   }
 
   // エージェントのブランチを順にまとめ先へ取り込む。衝突したものは取り込まずに報告する
-  async function mergeAgents(agentIds) {
+  const mergeAgents = (agentIds) => exclusive(() => mergeAgentsNow(agentIds));
+  async function mergeAgentsNow(agentIds) {
     const dir = root();
     const base = await baseBranch();
     await commitAll(dir, 'OZ Assistant: 統合前の保存');

@@ -94,6 +94,7 @@ echo ui > ui.txt; echo "from claude" > shared.txt; echo done
 if [ "$1" = "--version" ]; then echo "fake-codex 0.1"; exit 0; fi
 if [ "$1" = "--help" ]; then printf '  -m, --model <MODEL>\\n  -c, --config <key=value>\\n'; exit 0; fi
 cat > /dev/null
+if [ -f "$FAKE_DIR/codex-fail" ]; then echo "codex: error" >&2; exit 3; fi
 echo api > api.txt; echo "from codex" > shared.txt; echo done
 `, { mode: 0o755 });
   return bin;
@@ -137,7 +138,7 @@ test('依頼: 利用枠の上限で途中まで保存して待ち、回復した
     // 回復したら続きから再開
     fs.rmSync(path.join(dir, 'claude-limit'));
     quota.markRecovered('claude-code');
-    await until(() => runner.get(job.id).status === 'done');
+    await until(() => runner.get(job.id).status === 'done').catch((e) => { console.log('DEBUG', JSON.stringify(runner.get(job.id))); throw e; });
     assert.equal(runner.get(job.id).attempts, 2);
     assert.ok(fs.existsSync(path.join(git.worktreePath('claude-code'), 'resumed.txt')));
 
@@ -302,6 +303,55 @@ test('モデルとエフォート: CLI が対応している指定だけを、�
     assert.throws(() => cleanAgentSettings('codex', { effort: 'max' }));
     assert.throws(() => cleanAgentSettings('antigravity', { effort: 'high' }));
     assert.throws(() => cleanAgentSettings('unknown', {}));
+  } finally {
+    process.env.PATH = oldPath;
+  }
+});
+
+test('分担: 新しい作業フォルダで3人が同時に始めてもぶつからない。一部が失敗したら「一部失敗」にし、やり直して成功したら統合する', { skip: !POSIX, timeout: 120000 }, async () => {
+  const dir = tmp('fresh');
+  const bin = fakeCli(dir);
+  fakeAgy(bin);
+  const oldPath = process.env.PATH;
+  process.env.PATH = `${bin}${path.delimiter}${oldPath}`;
+  process.env.FAKE_DIR = dir;
+  // まだ Git になっていない、空の作業フォルダ
+  const ws = path.join(dir, 'ws');
+  fs.mkdirSync(ws);
+  try {
+    // 同時に3つ用意しても、初期化や worktree の追加がぶつからない
+    const git = createGit({ getConfig: () => ({ workspace: ws }) });
+    const prepared = await Promise.all(['claude-code', 'codex', 'antigravity'].map((id) => git.prepareWorktree(id)));
+    assert.deepEqual(prepared.map((p) => p.branch), ['oz/claude-code', 'oz/codex', 'oz/antigravity']);
+    fs.rmSync(path.join(ws, '.git'), { recursive: true, force: true });
+    fs.rmSync(path.join(ws, '.oz-worktrees'), { recursive: true, force: true });
+
+    // Codex だけ失敗させる
+    fs.writeFileSync(path.join(dir, 'codex-fail'), '');
+    const agents = createAgents({ openExternal: () => true });
+    const runner = createRunner({ agents, git, quota: createQuota(), vault: { ensureHub() {}, addNote() {}, appendNote() {} }, dataDir: path.join(dir, 'data') });
+    runner.startLoop();
+    const group = runner.createGroup({
+      request: '天気アプリ',
+      assignments: [{ agentId: 'claude-code', task: '画面' }, { agentId: 'codex', task: 'データ' }, { agentId: 'antigravity', task: '見た目' }],
+    });
+    const groupNow = () => runner.listGroups().find((g) => g.id === group.id);
+    await until(() => !['starting', 'running'].includes(groupNow().status), 60000);
+    assert.equal(groupNow().status, 'partial');
+    assert.deepEqual(groupNow().failedAgents, ['codex']);
+    assert.deepEqual(groupNow().merge.merged.sort(), ['antigravity', 'claude-code']);
+    assert.ok(fs.existsSync(path.join(ws, 'ui.txt')));
+
+    // やり直して成功したら、改めて統合する（shared.txt の衝突は Claude Code が解決）
+    fs.rmSync(path.join(dir, 'codex-fail'));
+    const codexJob = runner.list().find((j) => j.groupId === group.id && j.agentId === 'codex');
+    runner.retry(codexJob.id);
+    assert.equal(groupNow().status, 'running');
+    await until(() => !['starting', 'running'].includes(groupNow().status), 60000);
+    assert.equal(groupNow().status, 'merged', JSON.stringify(groupNow()));
+    assert.deepEqual(groupNow().failedAgents, []);
+    assert.ok(fs.existsSync(path.join(ws, 'api.txt')));
+    runner.stopAll();
   } finally {
     process.env.PATH = oldPath;
   }

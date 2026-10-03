@@ -132,6 +132,7 @@ function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, spaw
   }
 
   function schedule() {
+    if (stopped) return;
     const busy = busyWorktrees();
     const queued = [...jobs.values()].filter((j) => j.status === 'queued').sort((a, b) => a.createdAt - b.createdAt);
     for (const job of queued) {
@@ -308,6 +309,7 @@ function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, spaw
   // ---------- 利用枠の回復による再開 ----------
 
   function tick() {
+    if (stopped) return;
     let resumed = false;
     for (const job of jobs.values()) {
       if (job.status !== 'waiting-quota') continue;
@@ -323,7 +325,9 @@ function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, spaw
     if (resumed) schedule();
   }
 
-  quota.subscribe((agentId, q) => {
+  // 止めたあとは何もしない（同じ依頼を別の runner と二重に再開しないように）
+  let stopped = false;
+  const unsubscribe = quota.subscribe((agentId, q) => {
     if (q.state !== 'exhausted') tick();
   });
 
@@ -361,6 +365,13 @@ function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, spaw
     if (!job || !['failed', 'cancelled', 'waiting-quota'].includes(job.status)) throw new Error('やり直せない依頼です');
     job.resume = job.attempts > 0;
     update(job, { status: 'queued', error: null, resumeAt: null });
+    // 分担の一員なら、終わったあと改めて統合する
+    const group = job.groupId && groups.get(job.groupId);
+    if (group && group.status !== 'running') {
+      group.status = 'running';
+      save();
+      onGroup?.({ ...group });
+    }
     schedule();
     return publicJob(job);
   }
@@ -419,7 +430,14 @@ function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, spaw
     checking.add(groupId);
     try {
       const doneAgents = [...new Set(members.filter((j) => j.status === 'done').map((j) => j.worktreeOf))];
-      if (!group.autoMerge || doneAgents.length === 0) {
+      // 失敗・取り消しで終わった担当（統合されない）。やり直して成功したら外れる
+      const latest = new Map();
+      for (const j of members) latest.set(j.worktreeOf ?? j.agentId, j);
+      group.failedAgents = [...latest.entries()].filter(([, j]) => j.status !== 'done').map(([id]) => id);
+      if (doneAgents.length === 0) {
+        group.status = group.failedAgents.length ? 'failed' : 'finished';
+        if (group.failedAgents.length) group.error = '全員の作業が失敗しました。依頼の一覧の「やり直す」で再実行できます';
+      } else if (!group.autoMerge) {
         group.status = 'finished';
       } else {
         group.merge = await git.mergeAgents(doneAgents);
@@ -438,7 +456,8 @@ function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, spaw
             group.jobIds.push(job.id);
           }
         } else {
-          group.status = group.merge.conflicts.length ? 'conflict' : 'merged';
+          group.status = group.merge.conflicts.length ? 'conflict' : group.failedAgents.length ? 'partial' : 'merged';
+          if (group.status === 'merged') group.error = null;
         }
       }
       save();
@@ -467,6 +486,8 @@ function createRunner({ agents, git, quota, vault, dataDir, onJob, onGroup, spaw
   }
 
   function stopAll() {
+    stopped = true;
+    unsubscribe();
     clearInterval(timer);
     for (const child of processes.values()) killTree(child);
     save();

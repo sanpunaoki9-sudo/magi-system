@@ -71,6 +71,7 @@ function registerDevIpc({ handle, broadcast, openExternal, vault, news, speechMo
   const NOTIFY_GROUP = {
     merged: '分担した作業をまとめました',
     conflict: '分担した作業の統合で衝突が残りました',
+    partial: '分担した作業の一部が失敗しました',
     failed: '分担した作業の統合に失敗しました',
   };
 

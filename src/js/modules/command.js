@@ -6,6 +6,7 @@ const GROUP_STATUS = {
   starting: ['準備中', 'neutral'],
   running: ['作業中', 'active'],
   merged: ['統合済み', 'good'],
+  partial: ['一部失敗', 'warning'],
   conflict: ['衝突あり', 'warning'],
   finished: ['終了', 'neutral'],
   failed: ['失敗', 'critical'],
@@ -138,6 +139,9 @@ export function createCommandModule(oz) {
             h('p', { class: 'job-title' }, g.request),
             h('p', { class: 'muted job-detail' }, members.map((j) => `${AGENT_NAMES[j.agentId]}: ${j.title}`).join(' / ')),
             merge ? h('p', { class: 'job-detail' }, merge) : null,
+            g.failedAgents?.length
+              ? h('p', { class: 'job-error' }, `失敗: ${g.failedAgents.map((id) => AGENT_NAMES[id] ?? id).join('、')}（依頼の一覧の「やり直す」で再実行すると、終わったあと統合します）`)
+              : null,
           );
         }) : [h('p', { class: 'empty' }, 'まだ分担した依頼はありません')]));
       }
