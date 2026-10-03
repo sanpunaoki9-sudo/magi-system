@@ -42,6 +42,9 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
+      # Windows でだけ動くところ（CLI の検出・.cmd と .exe での依頼の実行）もここで確かめる
+      - name: Test
+        run: npm test
       - name: Build installer and portable exe
         run: npx electron-builder --config electron-builder.config.cjs --win --x64 --publish never
         env:
