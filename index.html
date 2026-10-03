@@ -1,200 +1,1171 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MAGI SYSTEM // NERV HQ SUPERCOMPUTER</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Noto+Sans+JP:wght@400;700;900&family=Orbitron:wght@600;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0c">
+<meta name="color-scheme" content="dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="貸しメモ">
+<meta name="format-detection" content="telephone=no">
+<title>貸しメモ</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+:root {
+  --bg: #0b0b0c;
+  --surface: #151517;
+  --surface-2: #1f1f22;
+  --line: #2c2c31;
+  --text: #f3f3f3;
+  --muted: #9d9da6;
+  --yellow: #ffd400;
+  --yellow-dim: #2e2800;
+  --ink: #111;
+  --red: #ff5d55;
+  --green: #43d17a;
+  --radius: 14px;
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --tape-font: 900 14px/1 "Arial Black", "Helvetica Neue", Arial, sans-serif;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { -webkit-text-size-adjust: 100%; background: var(--bg); }
+html.locked, html.locked body { overflow: hidden; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  padding-bottom: calc(104px + var(--safe-b));
+}
+button { font: inherit; cursor: pointer; touch-action: manipulation; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--yellow); outline-offset: 2px;
+}
+[hidden] { display: none !important; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- KEEP OUT テープ ---------- */
+.tape {
+  position: absolute;
+  left: -15%;
+  width: 130%;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  background: var(--yellow);
+  color: var(--ink);
+  font: var(--tape-font);
+  letter-spacing: .16em;
+  box-shadow: 0 3px 8px rgba(0,0,0,.55);
+}
+.tape::before, .tape::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0;
+  height: 4px;
+  background: repeating-linear-gradient(-45deg, var(--ink) 0 3px, transparent 3px 7px);
+}
+.tape::before { top: 2px; }
+.tape::after { bottom: 2px; }
+.tape span { padding-left: 8px; }
+
+.bg-tapes {
+  position: fixed; inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: .06;
+}
+.bg-tapes .tape { height: 44px; font-size: 20px; }
+.bg-tapes .t1 { top: 30%; transform: rotate(-24deg); }
+.bg-tapes .t2 { top: 58%; transform: rotate(18deg); }
+.bg-tapes .t3 { top: 85%; transform: rotate(-8deg); }
+
+.app { position: relative; z-index: 1; max-width: 640px; margin: 0 auto; padding: 0 16px; }
+
+/* ---------- ヘッダー ---------- */
+.top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: calc(var(--safe-t) + 12px) 0 6px;
+}
+.title { margin: 0; font-size: 23px; font-weight: 900; letter-spacing: .04em; }
+.title span { color: var(--yellow); }
+.icon-btn {
+  min-height: 44px; padding: 0 14px;
+  border-radius: 12px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--text);
+  font-size: 15px; font-weight: 700;
+}
+.tape-band { position: relative; height: 72px; margin: 0 -16px; overflow: hidden; }
+.tape-band .a { top: 22px; transform: rotate(-3deg); z-index: 2; }
+.tape-band .b { top: 24px; transform: rotate(4deg); z-index: 1; filter: brightness(.88); }
+
+/* ---------- お知らせ ---------- */
+.hint {
+  display: flex; gap: 10px; align-items: flex-start;
+  margin-top: 8px; padding: 12px;
+  border-radius: 12px; border: 1px solid #6b5c00;
+  background: var(--yellow-dim); color: #ffe680;
+  font-size: 14px;
+}
+.hint p { margin: 0; flex: 1; }
+.hint button { border: 0; background: none; color: #ffe680; font-size: 20px; line-height: 1; padding: 2px 4px; min-width: 32px; min-height: 32px; }
+
+/* ---------- 計算パネル ---------- */
+.panel {
+  margin-top: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.panel-head {
+  width: 100%;
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px;
+  background: none; border: 0; color: var(--text);
+  font-size: 16px; font-weight: 800; text-align: left;
+}
+.panel-head .grow { flex: 1; }
+.badge { background: var(--yellow); color: var(--ink); border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 900; }
+.chev { width: 20px; height: 20px; color: var(--muted); transition: transform .2s; flex: none; }
+[aria-expanded="true"] > .chev { transform: rotate(180deg); }
+.panel-body { padding: 0 16px 16px; }
+
+.seg {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+  padding: 4px; border-radius: 12px;
+  background: var(--bg); border: 1px solid var(--line);
+}
+.seg button {
+  height: 46px; border: 0; border-radius: 9px;
+  background: transparent; color: var(--muted);
+  font-size: 18px; font-weight: 900;
+}
+.seg button[aria-checked="true"] { background: var(--yellow); color: var(--ink); }
+
+.calc-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.box {
+  min-width: 0;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 12px;
+  padding: 8px 10px;
+}
+.box .lbl { display: block; font-size: 12px; color: var(--muted); font-weight: 700; }
+.box .val { display: block; font-size: 22px; font-weight: 900; line-height: 1.25; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.box.hl .val { color: var(--yellow); }
+.box input {
+  width: 100%; border: 0; padding: 0; margin: 0;
+  background: transparent; color: var(--text);
+  font-size: 22px; font-weight: 900; line-height: 1.25; font-variant-numeric: tabular-nums;
+  -webkit-appearance: none; appearance: none;
+}
+.box input:focus { outline: none; }
+.box:focus-within { border-color: var(--yellow); }
+.box input::placeholder { color: #55555c; }
+
+.menu-title { display: flex; justify-content: space-between; align-items: baseline; margin: 16px 2px 8px; font-size: 13px; font-weight: 800; color: var(--muted); }
+.menu-title small { font-weight: 600; }
+.menu { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.menu button {
+  display: flex; align-items: center; justify-content: space-between; gap: 4px;
+  min-height: 50px; padding: 0 12px;
+  border-radius: 12px; border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--text);
+  font-size: 18px; font-weight: 900; font-variant-numeric: tabular-nums;
+}
+.menu button:active { background: #2a2a2e; border-color: var(--yellow); }
+.menu .from small { font-size: 12px; color: var(--muted); margin-left: 1px; }
+.menu .arrow { color: var(--muted); font-size: 11px; letter-spacing: -.05em; }
+.menu .arrow b { color: var(--yellow); font-weight: 400; }
+.menu .to { color: var(--yellow); }
+
+/* ---------- 検索・並び替え ---------- */
+.tools { display: grid; gap: 8px; margin-top: 16px; }
+.search { position: relative; }
+.search svg { position: absolute; left: 13px; top: 50%; width: 18px; height: 18px; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.search input { padding-left: 40px; }
+.tool-row { display: flex; gap: 8px; }
+.tool-row select { flex: 1; min-width: 0; }
+.toggle {
+  flex: none; min-height: 48px; padding: 0 14px;
+  border-radius: 12px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--muted);
+  font-size: 15px; font-weight: 700;
+}
+.toggle[aria-pressed="true"] { border-color: var(--yellow); color: var(--yellow); }
+
+.input, select.input, textarea.input {
+  display: block; width: 100%; min-width: 0; min-height: 48px;
+  padding: 10px 12px;
+  border-radius: 12px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--text);
+  font-size: 17px; font-family: inherit;
+  -webkit-appearance: none; appearance: none;
+}
+.input::placeholder { color: #66666e; }
+.input:focus { outline: none; border-color: var(--yellow); }
+select.input {
+  padding-right: 36px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239d9da6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 18px;
+}
+input[type="date"].input { line-height: 26px; }
+input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
+
+.summary { display: flex; justify-content: space-between; gap: 12px; margin: 16px 2px 8px; font-size: 14px; color: var(--muted); }
+.summary b { color: var(--text); font-variant-numeric: tabular-nums; }
+
+/* ---------- カード ---------- */
+.card {
+  margin-bottom: 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.card.done { background: #111113; }
+.card.done .card-head { opacity: .7; }
+.card-head {
+  width: 100%;
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px;
+  background: none; border: 0; color: inherit; text-align: left;
+}
+.who { flex: 1; min-width: 0; }
+.who .name { display: block; font-size: 19px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who .sub { display: block; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head-amt { text-align: right; flex: none; }
+.head-amt .lbl { display: block; font-size: 12px; color: var(--muted); font-weight: 700; }
+.head-amt .val { display: block; font-size: 25px; font-weight: 900; line-height: 1.1; color: var(--yellow); font-variant-numeric: tabular-nums; }
+.stamp {
+  flex: none;
+  border: 2px solid var(--green); color: var(--green);
+  border-radius: 8px; padding: 2px 8px;
+  font-size: 14px; font-weight: 900; letter-spacing: .1em;
+  transform: rotate(-6deg);
+}
+.card-body { padding: 0 16px 16px; border-top: 1px solid var(--line); }
+.kv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; margin: 14px 0; }
+.kv .k { display: block; font-size: 12px; color: var(--muted); font-weight: 700; }
+.kv .v { display: block; font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.next {
+  margin-top: 10px; padding: 8px 12px;
+  border-radius: 10px; border: 1px dashed #3d3d44;
+  background: var(--bg);
+  font-size: 14px; color: var(--muted);
+}
+.next b { color: var(--yellow); }
+.next.ok b { color: var(--green); }
+.reps h3 { margin: 16px 0 4px; font-size: 13px; font-weight: 800; color: var(--muted); }
+.rep { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.rep .d { flex: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rep .a { font-weight: 800; font-variant-numeric: tabular-nums; }
+.rep .x { width: 40px; height: 40px; border: 0; border-radius: 10px; background: var(--surface-2); color: var(--muted); font-size: 16px; }
+.reps .none { font-size: 14px; color: #66666e; padding: 4px 0; }
+.note { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--bg); font-size: 14px; color: #d0d0d6; white-space: pre-wrap; word-break: break-word; }
+.actions { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; margin-top: 14px; }
+
+.btn {
+  min-height: 48px; padding: 0 12px;
+  border-radius: 12px; border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--text);
+  font-size: 16px; font-weight: 800;
+}
+.btn.primary { background: var(--yellow); border-color: var(--yellow); color: var(--ink); }
+.btn.danger { color: var(--red); }
+.btn:active { filter: brightness(.9); }
+
+.empty {
+  position: relative; overflow: hidden;
+  margin-top: 4px; padding: 64px 16px 28px;
+  border: 1px dashed var(--line); border-radius: var(--radius);
+  text-align: center; color: var(--muted);
+}
+.empty .tape { top: 14px; height: 26px; font-size: 12px; transform: rotate(-2deg); }
+.empty p { margin: 0; }
+.empty b { color: var(--text); }
+
+/* ---------- 追加ボタン ---------- */
+.fab {
+  position: fixed; z-index: 20;
+  right: max(16px, env(safe-area-inset-right, 0px));
+  bottom: calc(18px + var(--safe-b));
+  width: 64px; height: 64px;
+  border-radius: 50%; border: 3px solid var(--ink);
+  background: var(--yellow); color: var(--ink);
+  box-shadow: 0 0 0 3px var(--yellow), 0 8px 20px rgba(0,0,0,.6);
+  display: grid; place-items: center;
+}
+.fab svg { width: 30px; height: 30px; }
+
+/* ---------- シート ---------- */
+.overlay {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(0,0,0,.65);
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s;
+}
+.overlay.open { opacity: 1; pointer-events: auto; }
+.sheet {
+  width: 100%; max-width: 640px;
+  max-height: 92vh; max-height: 92dvh;
+  overflow-y: auto; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  background: var(--surface);
+  border: 1px solid var(--line); border-bottom: 0;
+  border-radius: 20px 20px 0 0;
+  padding: 0 16px calc(16px + var(--safe-b));
+  transform: translateY(100%);
+  transition: transform .25s ease;
+}
+.overlay.open .sheet { transform: none; }
+.sheet-head {
+  position: sticky; top: 0; z-index: 2;
+  margin: 0 -16px 8px; padding: 0 16px 10px;
+  background: var(--surface);
+}
+.sheet-head::before {
+  content: ""; display: block; height: 7px; margin: 0 -16px 12px;
+  background: repeating-linear-gradient(-45deg, var(--yellow) 0 9px, var(--ink) 9px 18px);
+}
+.sheet-head .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sheet-head h2 { margin: 0; font-size: 19px; font-weight: 900; }
+.sheet-head .close { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); font-size: 18px; }
+.sheet-head .who-line { margin-top: 2px; font-size: 14px; color: var(--muted); }
+
+.field { margin-bottom: 14px; }
+.field > label, .field > .label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 800; color: var(--muted); }
+.field .req { color: var(--yellow); margin-left: 4px; }
+.field .help { margin-top: 6px; font-size: 12px; color: #77777f; }
+.row2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.with-quick { display: flex; gap: 6px; }
+.with-quick .input { flex: 1; }
+.quick {
+  flex: none; width: 54px; min-height: 48px;
+  border-radius: 12px; border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--yellow);
+  font-size: 15px; font-weight: 900;
+}
+.static { min-height: 48px; display: flex; align-items: center; padding: 0 12px; border-radius: 12px; border: 1px dashed var(--line); color: var(--muted); font-variant-numeric: tabular-nums; }
+.preview {
+  margin: 4px 0 14px; padding: 12px;
+  border-radius: 12px; border: 1px solid #4a4000;
+  background: var(--yellow-dim); color: #ffe680; font-size: 14px;
+}
+.preview b { font-size: 18px; color: var(--yellow); font-variant-numeric: tabular-nums; }
+.error { margin: -4px 0 12px; color: var(--red); font-size: 14px; font-weight: 700; }
+.sheet-actions { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 4px; }
+
+.backup-list { display: grid; gap: 10px; }
+.backup-list .btn { width: 100%; text-align: left; padding: 12px 14px; }
+.backup-list .btn small { display: block; font-weight: 600; font-size: 13px; color: var(--muted); }
+.backup-list .btn.primary small { color: #4a4000; }
+.backup-note { margin: 14px 0 4px; font-size: 13px; color: var(--muted); }
+
+/* ---------- トースト ---------- */
+.toast {
+  position: fixed; z-index: 60; left: 50%;
+  bottom: calc(96px + var(--safe-b));
+  transform: translate(-50%, 20px);
+  max-width: calc(100% - 32px);
+  padding: 10px 16px;
+  border-radius: 999px; border: 2px solid var(--yellow);
+  background: var(--ink); color: var(--text);
+  font-size: 15px; font-weight: 700;
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s, transform .2s;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; }
+}
+</style>
 </head>
-<body class="nerv-theme">
-    <!-- CRT Scanline overlay -->
-    <div class="crt-overlay" id="crtOverlay"></div>
+<body>
 
-    <div class="app-container">
-        <!-- Top NERV Header -->
-        <header class="nerv-header">
-            <div class="brand">
-                <div class="logo-box">NERV</div>
-                <div class="header-titles">
-                    <h1>MAGI 3-SYSTEM</h1>
-                    <span class="sub-title">SUPERCOMPUTER SYSTEM CODE: 301</span>
-                </div>
-            </div>
-            
-            <div class="system-status-bar">
-                <div class="status-item">
-                    <span class="label">LOCATION:</span>
-                    <span class="val">TOKYO-3 // GEOFRONT</span>
-                </div>
-                <div class="status-item">
-                    <span class="label">SYSTEM STATUS:</span>
-                    <span class="val status-green" id="sysStatusText">ALL GREEN</span>
-                </div>
-                <div class="status-item">
-                    <span class="label">TIME:</span>
-                    <span class="val" id="clockDisplay">--:--:--</span>
-                </div>
-            </div>
+<div class="bg-tapes" aria-hidden="true">
+  <div class="tape t1"><span>KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT</span></div>
+  <div class="tape t2"><span>CAUTION　CAUTION　CAUTION　CAUTION　CAUTION　CAUTION　CAUTION　CAUTION　CAUTION　CAUTION　CAUTION</span></div>
+  <div class="tape t3"><span>KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT</span></div>
+</div>
 
-            <div class="header-controls">
-                <button id="speedToggleBtn" class="control-btn active">
-                    ⚡ SPEED: NORMAL
-                </button>
-                <button id="soundToggleBtn" class="control-btn sound-on">
-                    <span class="icon">🔊</span> SOUND: <span id="soundStateText">ON</span>
-                </button>
-                <button id="scanlineToggleBtn" class="control-btn active">
-                    CRT: ON
-                </button>
-                <button id="alarmBtn" class="control-btn alert-btn">
-                    EMERGENCY
-                </button>
-            </div>
-        </header>
+<div class="app">
+  <header class="top">
+    <h1 class="title">貸し<span>メモ</span></h1>
+    <button class="icon-btn" id="backupBtn" type="button">バックアップ</button>
+  </header>
 
-        <!-- Main MAGI Display Grid -->
-        <main class="magi-viewport">
-            <!-- MAGI 3 Nodes Header Bar -->
-            <div class="deliberation-banner" id="consensusBanner">
-                <div class="banner-label">MAGI JUDGMENT</div>
-                <div class="banner-status" id="consensusResult">AWAITING QUERY INPUT</div>
-                <div class="banner-code" id="consensusCode">CODE 000</div>
-            </div>
+  <div class="tape-band" aria-hidden="true">
+    <div class="tape b"><span>CAUTION　CAUTION　CAUTION　CAUTION　CAUTION　CAUTION　CAUTION　CAUTION　CAUTION　CAUTION</span></div>
+    <div class="tape a"><span>KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT</span></div>
+  </div>
 
-            <!-- The 3 MAGI Personalities Cards -->
-            <div class="magi-nodes-container">
-                <!-- MELCHIOR-1 -->
-                <div class="magi-card melchior" id="nodeMelchior">
-                    <div class="hex-bg"></div>
-                    <div class="card-header">
-                        <div class="node-id">MELCHIOR-1</div>
-                        <div class="personality-tag">科学者 (SCIENTIST)</div>
-                    </div>
-                    <div class="card-body">
-                        <div class="vote-display" id="voteMelchior">--</div>
-                        <div class="reason-box">
-                            <span class="reason-label">RATIONALE:</span>
-                            <p class="reason-text" id="reasonMelchior">システム待機中。論理パラメータ正常。</p>
-                        </div>
-                    </div>
-                    <div class="card-footer">
-                        <div class="metric">
-                            <span>LOGIC WEIGHT:</span>
-                            <span class="val" id="weightValMelchior">100%</span>
-                        </div>
-                        <div class="progress-bar"><div class="fill" id="fillMelchior" style="width: 100%;"></div></div>
-                    </div>
-                </div>
+  <div class="hint" id="installHint" hidden>
+    <p>ホーム画面に追加して使うと、データが消えにくくなります。<br>Safari の共有ボタン → 「ホーム画面に追加」</p>
+    <button type="button" id="hintClose" aria-label="閉じる">×</button>
+  </div>
 
-                <!-- BALTHASAR-2 -->
-                <div class="magi-card balthasar" id="nodeBalthasar">
-                    <div class="hex-bg"></div>
-                    <div class="card-header">
-                        <div class="node-id">BALTHASAR-2</div>
-                        <div class="personality-tag">母親 (MOTHER)</div>
-                    </div>
-                    <div class="card-body">
-                        <div class="vote-display" id="voteBalthasar">--</div>
-                        <div class="reason-box">
-                            <span class="reason-label">RATIONALE:</span>
-                            <p class="reason-text" id="reasonBalthasar">システム待機中。保護プロトコル待機。</p>
-                        </div>
-                    </div>
-                    <div class="card-footer">
-                        <div class="metric">
-                            <span>MOTHERHOOD WEIGHT:</span>
-                            <span class="val" id="weightValBalthasar">100%</span>
-                        </div>
-                        <div class="progress-bar"><div class="fill" id="fillBalthasar" style="width: 100%;"></div></div>
-                    </div>
-                </div>
-
-                <!-- CASPAR-3 -->
-                <div class="magi-card caspar" id="nodeCaspar">
-                    <div class="hex-bg"></div>
-                    <div class="card-header">
-                        <div class="node-id">CASPAR-3</div>
-                        <div class="personality-tag">女性 (WOMAN)</div>
-                    </div>
-                    <div class="card-body">
-                        <div class="vote-display" id="voteCaspar">--</div>
-                        <div class="reason-box">
-                            <span class="reason-label">RATIONALE:</span>
-                            <p class="reason-text" id="reasonCaspar">システム待機中。本能・自己保存モニタ中。</p>
-                        </div>
-                    </div>
-                    <div class="card-footer">
-                        <div class="metric">
-                            <span>EMOTION WEIGHT:</span>
-                            <span class="val" id="weightValCaspar">100%</span>
-                        </div>
-                        <div class="progress-bar"><div class="fill" id="fillCaspar" style="width: 100%;"></div></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Lower Interactive Console & Presets Section -->
-            <div class="control-panel-grid">
-                <!-- Left: Deliberation Input Form & Presets -->
-                <div class="panel-box query-panel">
-                    <div class="panel-header">
-                        <span class="icon">⚡</span> DELIBERATION QUERY / 審議事項入力
-                    </div>
-                    <div class="panel-content">
-                        <div class="input-row">
-                            <input type="text" id="queryInput" placeholder="例: 第14使徒迎撃のためエヴァ初号機のダミーシステム切替の可否..." autocomplete="off">
-                            <button id="submitQueryBtn" class="nerv-action-btn">
-                                審議開始 (EXECUTE)
-                            </button>
-                        </div>
-
-                        <div class="preset-section">
-                            <span class="section-title">NERV EMERGENCY PRESETS (作戦議題プリセット):</span>
-                            <div class="preset-buttons">
-                                <button class="preset-btn" data-query="第14使徒ゼルエル迎撃のため、エヴァ初号機ダミーシステム切替を実施すべきか？">
-                                    ダミーシステム起動
-                                </button>
-                                <button class="preset-btn" data-query="使徒のジオフロント侵入を阻止するため、N2爆雷の即時投下を承認すべきか？">
-                                    N2爆雷投下承認
-                                </button>
-                                <button class="preset-btn" data-query="ヤシマ作戦発動に伴う、日本全国の特別電力強制微徴収シークエンスの承認。">
-                                    ヤシマ作戦電力徴収
-                                </button>
-                                <button class="preset-btn" data-query="バルディエル侵食に伴い、エヴァ3号機を第13使徒として識別し即時破却すべきか？">
-                                    エヴァ3号機破却
-                                </button>
-                                <button class="preset-btn emergency" data-query="NERV本部の機密保持のため、自爆シークエンス（CODE 601）を起動すべきか？">
-                                    自爆シークエンス起動
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Right: Kernel Log Monitor -->
-                <div class="panel-box log-panel">
-                    <div class="panel-header">
-                        <span class="icon">📟</span> KERNEL SYSTEM LOG / MAGI リアルタイムログ
-                        <button class="clear-log-btn" id="clearLogBtn">CLEAR</button>
-                    </div>
-                    <div class="panel-content log-window" id="kernelLog">
-                        <div class="log-entry sys">[SYSTEM] MAGI-01 Kernel v4.09 initialized.</div>
-                        <div class="log-entry sys">[SYSTEM] Melchior-1, Balthasar-2, Caspar-3 linked. Synchronized at 99.98%.</div>
-                    </div>
-                </div>
-            </div>
-        </main>
-
-        <!-- Footer Bar -->
-        <footer class="nerv-footer">
-            <div>MAGI SYSTEM // AKAGI RESEARCH LABORATORY // TOKYO-3</div>
-            <div class="secret-tag">TOP SECRET - NERV INTERNAL USE ONLY</div>
-        </footer>
+  <!-- 割増し計算 -->
+  <section class="panel">
+    <button class="panel-head" id="calcToggle" type="button" aria-expanded="true" aria-controls="calcBody">
+      <span class="grow">割増し計算</span>
+      <span class="badge" id="rateBadge">1割</span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="panel-body" id="calcBody">
+      <div class="seg" role="radiogroup" aria-label="割合" id="rateSeg">
+        <button type="button" role="radio" data-rate="0.1">1割</button>
+        <button type="button" role="radio" data-rate="0.2">2割</button>
+        <button type="button" role="radio" data-rate="0.3">3割</button>
+      </div>
+      <div class="calc-grid">
+        <label class="box">
+          <span class="lbl">金額</span>
+          <input id="calcAmount" type="text" inputmode="decimal" placeholder="0" autocomplete="off">
+        </label>
+        <div class="box"><span class="lbl">割増し</span><span class="val" id="calcSur">—</span></div>
+        <div class="box hl"><span class="lbl">合計</span><span class="val" id="calcTotal">—</span></div>
+      </div>
+      <div class="menu-title"><span>メニュー表</span><small>タップで新規登録に入力</small></div>
+      <div class="menu" id="menu"></div>
     </div>
+  </section>
 
-    <script src="app.js"></script>
+  <!-- 検索・並び替え -->
+  <section class="tools">
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input class="input" id="search" type="search" placeholder="名前で検索" autocomplete="off" enterkeyhint="search" aria-label="名前で検索">
+    </div>
+    <div class="tool-row">
+      <select class="input" id="sort" aria-label="並び替え">
+        <option value="kana">あいうえお順</option>
+        <option value="big">枠が大きい順</option>
+        <option value="small">枠が小さい順</option>
+      </select>
+      <button class="toggle" id="hideDone" type="button" aria-pressed="false">完済を隠す</button>
+    </div>
+  </section>
+
+  <div class="summary" id="summary"></div>
+  <main id="list"></main>
+</div>
+
+<button class="fab" id="addBtn" type="button" aria-label="新規登録">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+</button>
+
+<!-- 登録・編集シート -->
+<div class="overlay" id="entrySheet" aria-hidden="true">
+  <form class="sheet" id="entryForm" role="dialog" aria-modal="true" aria-labelledby="entryTitle" novalidate>
+    <div class="sheet-head">
+      <div class="row">
+        <h2 id="entryTitle">新規登録</h2>
+        <button class="close" type="button" data-close aria-label="閉じる">×</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="fName">名前<span class="req">必須</span></label>
+      <input class="input" id="fName" type="text" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="fKana">ふりがな</label>
+      <input class="input" id="fKana" type="text" autocomplete="off" placeholder="あいうえお順の並び替えに使います（任意）">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label for="fLent">貸した日<span class="req">必須</span></label>
+        <input class="input" id="fLent" type="date">
+      </div>
+      <div class="field">
+        <span class="label">メモした日</span>
+        <div class="static" id="fMemoDate"></div>
+      </div>
+    </div>
+    <div class="field">
+      <label for="fPrincipal">元金（枠）<span class="req">必須</span></label>
+      <input class="input" id="fPrincipal" type="text" inputmode="decimal" autocomplete="off" placeholder="例：10">
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label for="fSurcharge">割増し</label>
+        <input class="input" id="fSurcharge" type="text" inputmode="decimal" autocomplete="off" placeholder="例：1">
+      </div>
+      <div class="field">
+        <label for="fInterval">何日ごとに増える</label>
+        <input class="input" id="fInterval" type="text" inputmode="numeric" autocomplete="off" placeholder="例：7">
+      </div>
+    </div>
+    <div class="field" style="margin-top:-6px">
+      <div class="with-quick" role="group" aria-label="割増しを元金から計算">
+        <button class="quick" type="button" data-quick="0.1">1割</button>
+        <button class="quick" type="button" data-quick="0.2">2割</button>
+        <button class="quick" type="button" data-quick="0.3">3割</button>
+      </div>
+      <div class="help">ボタンで「元金 × 割合」を割増しに入れます</div>
+    </div>
+    <div class="preview" id="fPreview"></div>
+    <div class="field">
+      <label for="fNote">メモ</label>
+      <textarea class="input" id="fNote" rows="3"></textarea>
+    </div>
+    <div class="error" id="fError" hidden></div>
+    <div class="sheet-actions">
+      <button class="btn" type="button" data-close>キャンセル</button>
+      <button class="btn primary" type="submit">保存</button>
+    </div>
+  </form>
+</div>
+
+<!-- 返済シート -->
+<div class="overlay" id="repaySheet" aria-hidden="true">
+  <form class="sheet" id="repayForm" role="dialog" aria-modal="true" aria-labelledby="repayTitle" novalidate>
+    <div class="sheet-head">
+      <div class="row">
+        <div>
+          <h2 id="repayTitle">返済を記録</h2>
+          <div class="who-line" id="repayWho"></div>
+        </div>
+        <button class="close" type="button" data-close aria-label="閉じる">×</button>
+      </div>
+    </div>
+    <div class="row2">
+      <div class="field">
+        <label for="rDate">返済日</label>
+        <input class="input" id="rDate" type="date">
+      </div>
+      <div class="field">
+        <label for="rAmount">金額</label>
+        <input class="input" id="rAmount" type="text" inputmode="decimal" autocomplete="off">
+      </div>
+    </div>
+    <div class="error" id="rError" hidden></div>
+    <div class="sheet-actions">
+      <button class="btn" type="button" data-close>キャンセル</button>
+      <button class="btn primary" type="submit">記録する</button>
+    </div>
+  </form>
+</div>
+
+<!-- バックアップシート -->
+<div class="overlay" id="backupSheet" aria-hidden="true">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="backupTitle">
+    <div class="sheet-head">
+      <div class="row">
+        <h2 id="backupTitle">バックアップ</h2>
+        <button class="close" type="button" data-close aria-label="閉じる">×</button>
+      </div>
+    </div>
+    <div class="backup-list">
+      <button class="btn primary" type="button" id="exportBtn">書き出す<small id="exportInfo"></small></button>
+      <button class="btn" type="button" id="importBtn">読み込む<small>書き出したファイルからデータを戻します（今のデータは置き換わります）</small></button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+    </div>
+    <p class="backup-note">データはこのスマホの中にだけ保存されています。機種変更のときや念のために、ときどき書き出して「ファイル」アプリなどに保存してください。</p>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  const DATA_KEY = 'kashimemo.data.v1';
+  const PREF_KEY = 'kashimemo.prefs.v1';
+  const MENU = [[15, 10], [10, 7], [8, 5], [5.5, 3.8], [5, 3], [3, 2], [2, 1]];
+  const DAY = 86400000;
+  const collator = new Intl.Collator('ja');
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- 保存 ----------
+  function load(key, fallback) {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch (e) {
+      return fallback;
+    }
+  }
+  function store(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+      return true;
+    } catch (e) {
+      toast('保存できませんでした');
+      return false;
+    }
+  }
+  const saveEntries = () => store(DATA_KEY, { version: 1, entries });
+  const savePrefs = () => store(PREF_KEY, prefs);
+
+  // ---------- 数値・日付 ----------
+  const pad = (n) => String(n).padStart(2, '0');
+  const r2 = (n) => Math.round(n * 100) / 100;
+  const fmt = (n) => r2(n).toLocaleString('ja-JP', { maximumFractionDigits: 2 });
+
+  function parseNum(v) {
+    if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+    const s = String(v ?? '').normalize('NFKC').replace(/[,\s]/g, '');
+    if (s === '') return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+  function today() {
+    const d = new Date();
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+  function toDays(s) {
+    const [y, m, d] = s.split('-').map(Number);
+    return Math.round(Date.UTC(y, m - 1, d) / DAY);
+  }
+  function fromDays(n) {
+    const d = new Date(n * DAY);
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+  }
+  function validDate(s) {
+    return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(toDays(s)) ? s : null;
+  }
+  function fmtDate(s, withYear = true) {
+    const [y, m, d] = s.split('-').map(Number);
+    return withYear ? `${y}/${m}/${d}` : `${m}/${d}`;
+  }
+  function uid() {
+    return (crypto.randomUUID && crypto.randomUUID()) || Date.now().toString(36) + Math.random().toString(36).slice(2);
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  // 検索用：全角半角・カタカナひらがな・大文字小文字の違いを無視
+  function norm(s) {
+    return String(s).normalize('NFKC').toLowerCase()
+      .replace(/[ァ-ヶ]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60))
+      .replace(/\s+/g, '');
+  }
+
+  function normalizeEntries(list) {
+    if (!Array.isArray(list)) return [];
+    return list
+      .filter((e) => e && typeof e.name === 'string' && e.name.trim())
+      .map((e) => ({
+        id: String(e.id || uid()),
+        name: e.name.trim(),
+        kana: String(e.kana || '').trim(),
+        lentDate: validDate(e.lentDate) || today(),
+        memoDate: validDate(e.memoDate) || today(),
+        principal: Math.max(0, parseNum(e.principal) || 0),
+        surcharge: Math.max(0, parseNum(e.surcharge) || 0),
+        interval: Math.max(0, Math.floor(parseNum(e.interval) || 0)),
+        note: String(e.note || ''),
+        repayments: (Array.isArray(e.repayments) ? e.repayments : [])
+          .filter((r) => r && validDate(r.date) && parseNum(r.amount) > 0)
+          .map((r) => ({ id: String(r.id || uid()), date: r.date, amount: parseNum(r.amount) })),
+      }));
+  }
+
+  // ---------- 計算 ----------
+  // 合計 = 元金 + 割増し × 加算回数（貸した日から「何日ごと」が来るたびに1回）
+  // 返済の累計が合計に届いた日で完済とし、それ以降は増やさない
+  function compute(e, T) {
+    const L = toDays(e.lentDate);
+    const grows = e.interval > 0 && e.surcharge > 0;
+    const periodsAt = (d) => (grows ? Math.max(0, Math.floor((d - L) / e.interval)) : 0);
+    const totalAt = (d) => e.principal + e.surcharge * periodsAt(d);
+
+    const reps = e.repayments.slice().sort((a, b) => a.date.localeCompare(b.date));
+    let paid = 0;
+    let settledDay = null;
+    for (const r of reps) {
+      paid += r.amount;
+      const d = toDays(r.date);
+      if (paid >= totalAt(d) - 1e-9) { settledDay = d; break; }
+    }
+    const paidAll = reps.reduce((s, r) => s + r.amount, 0);
+    const ref = settledDay ?? T;
+    const periods = periodsAt(ref);
+    const total = r2(totalAt(ref));
+    const remaining = r2(total - paidAll);
+    const done = settledDay !== null;
+    let next = null;
+    if (!done && grows) {
+      const nd = L + (periods + 1) * e.interval;
+      next = { date: fromDays(nd), daysLeft: nd - T, total: r2(totalAt(nd)) };
+    }
+    return {
+      periods, total, paid: r2(paidAll), remaining, done, next,
+      settledDate: done ? fromDays(settledDay) : null,
+      elapsed: Math.max(0, T - L),
+      reps,
+    };
+  }
+
+  // ---------- 状態 ----------
+  let entries = normalizeEntries((load(DATA_KEY, {}) || {}).entries);
+  const prefs = Object.assign({ rate: 0.1, sort: 'kana', hideDone: false, calcOpen: true, hintClosed: false }, load(PREF_KEY, {}));
+  if (![0.1, 0.2, 0.3].includes(prefs.rate)) prefs.rate = 0.1;
+  const expanded = new Set();
+  let currentDay = today();
+
+  // ---------- 割増し計算パネル ----------
+  const rateLabel = (r) => `${Math.round(r * 10)}割`;
+
+  function renderMenu() {
+    $('menu').innerHTML = MENU.map(([from, to]) => `
+      <button type="button" data-from="${from}" data-to="${to}" aria-label="${fmt(from)}枠を${fmt(to)}で新規登録">
+        <span class="from">${fmt(from)}<small>枠</small></span>
+        <span class="arrow" aria-hidden="true">▷<b>▶</b>▷</span>
+        <span class="to">${fmt(to)}</span>
+      </button>`).join('');
+  }
+  function renderRate() {
+    $('rateBadge').textContent = rateLabel(prefs.rate);
+    for (const b of $('rateSeg').querySelectorAll('button')) {
+      b.setAttribute('aria-checked', String(Number(b.dataset.rate) === prefs.rate));
+    }
+    updateCalc();
+  }
+  function updateCalc() {
+    const a = parseNum($('calcAmount').value);
+    $('calcSur').textContent = a === null ? '—' : fmt(a * prefs.rate);
+    $('calcTotal').textContent = a === null ? '—' : fmt(a * (1 + prefs.rate));
+  }
+  function renderCalcOpen() {
+    $('calcToggle').setAttribute('aria-expanded', String(prefs.calcOpen));
+    $('calcBody').hidden = !prefs.calcOpen;
+  }
+
+  $('rateSeg').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button[data-rate]');
+    if (!b) return;
+    prefs.rate = Number(b.dataset.rate);
+    savePrefs();
+    renderRate();
+  });
+  $('calcAmount').addEventListener('input', updateCalc);
+  $('calcToggle').addEventListener('click', () => {
+    prefs.calcOpen = !prefs.calcOpen;
+    savePrefs();
+    renderCalcOpen();
+  });
+  $('menu').addEventListener('click', (ev) => {
+    const b = ev.target.closest('button[data-from]');
+    if (!b) return;
+    const from = Number(b.dataset.from);
+    const to = Number(b.dataset.to);
+    openEntry(null, {
+      principal: from,
+      surcharge: r2(from * prefs.rate),
+      note: `${fmt(from)}枠 ▷▶︎▷ ${fmt(to)}`,
+    });
+  });
+
+  // ---------- 一覧 ----------
+  function render() {
+    const T = toDays(currentDay);
+    const q = norm($('search').value);
+    let rows = entries.map((e) => ({ e, c: compute(e, T) }));
+    const activeAll = rows.filter((r) => !r.c.done);
+    if (q) rows = rows.filter(({ e }) => norm(e.name).includes(q) || norm(e.kana).includes(q));
+    if (prefs.hideDone) rows = rows.filter((r) => !r.c.done);
+
+    const key = (e) => e.kana || e.name;
+    const byKana = (a, b) => collator.compare(key(a.e), key(b.e));
+    const cmp = {
+      kana: byKana,
+      big: (a, b) => b.e.principal - a.e.principal || byKana(a, b),
+      small: (a, b) => a.e.principal - b.e.principal || byKana(a, b),
+    }[prefs.sort] || byKana;
+    rows.sort((a, b) => (a.c.done - b.c.done) || cmp(a, b));
+
+    const restSum = activeAll.reduce((s, r) => s + Math.max(0, r.c.remaining), 0);
+    $('summary').innerHTML = entries.length
+      ? `<span>${q || prefs.hideDone ? `表示 <b>${rows.length}</b> / ` : ''}全 <b>${entries.length}</b> 件（返済中 <b>${activeAll.length}</b>）</span><span>残り合計 <b>${fmt(restSum)}</b></span>`
+      : '';
+
+    if (!entries.length) {
+      $('list').innerHTML = `
+        <div class="empty">
+          <div class="tape" aria-hidden="true"><span>KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT</span></div>
+          <p><b>まだ記録がありません</b></p>
+          <p>右下の ＋ から追加できます</p>
+        </div>`;
+      return;
+    }
+    if (!rows.length) {
+      $('list').innerHTML = `<div class="empty" style="padding-top:28px"><p>見つかりませんでした</p></div>`;
+      return;
+    }
+    $('list').innerHTML = rows.map(({ e, c }) => card(e, c)).join('');
+  }
+
+  function card(e, c) {
+    const open = expanded.has(e.id);
+    const head = c.done
+      ? `<span class="stamp">完済</span>`
+      : `<span class="head-amt"><span class="lbl">残り</span><span class="val">${fmt(c.remaining)}</span></span>`;
+    const sub = [e.kana, `合計 ${fmt(c.total)}`, `${fmtDate(e.lentDate, false)}〜`].filter(Boolean).map(esc).join('　');
+
+    let next;
+    if (c.done) next = `<div class="next ok"><b>完済</b>　${fmtDate(c.settledDate)}${c.remaining < 0 ? `（${fmt(-c.remaining)} 多く返済）` : ''}</div>`;
+    else if (c.next) next = `<div class="next">次の加算 <b>${fmtDate(c.next.date, false)}</b>（${c.next.daysLeft === 1 ? '明日' : `あと${c.next.daysLeft}日`}）→ 合計 <b>${fmt(c.next.total)}</b></div>`;
+    else next = `<div class="next">割増しの自動加算なし</div>`;
+
+    const reps = c.reps.length
+      ? c.reps.map((r, i) => `
+          <div class="rep">
+            <span class="d">${i + 1}回目　${fmtDate(r.date)}</span>
+            <span class="a">${fmt(r.amount)}</span>
+            <button class="x" type="button" data-act="delrep" data-id="${e.id}" data-rep="${r.id}" aria-label="${fmtDate(r.date)}の返済を削除">✕</button>
+          </div>`).join('')
+      : `<div class="none">まだ返済はありません</div>`;
+
+    return `
+      <article class="card${c.done ? ' done' : ''}">
+        <button class="card-head" type="button" data-act="toggle" data-id="${e.id}" aria-expanded="${open}">
+          <span class="who"><span class="name">${esc(e.name)}</span><span class="sub">${sub}</span></span>
+          ${head}
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="card-body"${open ? '' : ' hidden'}>
+          <div class="kv">
+            <div><span class="k">貸した日</span><span class="v">${fmtDate(e.lentDate)}</span></div>
+            <div><span class="k">メモした日</span><span class="v">${fmtDate(e.memoDate)}</span></div>
+            <div><span class="k">元金（枠）</span><span class="v">${fmt(e.principal)}</span></div>
+            <div><span class="k">割増し</span><span class="v">${e.surcharge > 0 && e.interval > 0 ? `+${fmt(e.surcharge)} / ${e.interval}日ごと` : 'なし'}</span></div>
+            <div><span class="k">加算回数</span><span class="v">${c.periods}回</span></div>
+            <div><span class="k">経過日数</span><span class="v">${c.elapsed}日</span></div>
+          </div>
+          <div class="totals">
+            <div class="box hl"><span class="lbl">合計</span><span class="val">${fmt(c.total)}</span></div>
+            <div class="box"><span class="lbl">返済済み</span><span class="val">${fmt(c.paid)}</span></div>
+            <div class="box"><span class="lbl">残り</span><span class="val">${fmt(Math.max(0, c.remaining))}</span></div>
+          </div>
+          ${next}
+          <div class="reps"><h3>返済の記録（${c.reps.length}回）</h3>${reps}</div>
+          ${e.note ? `<div class="note">${esc(e.note)}</div>` : ''}
+          <div class="actions">
+            <button class="btn primary" type="button" data-act="repay" data-id="${e.id}">返済を記録</button>
+            <button class="btn" type="button" data-act="edit" data-id="${e.id}">編集</button>
+            <button class="btn danger" type="button" data-act="del" data-id="${e.id}">削除</button>
+          </div>
+        </div>
+      </article>`;
+  }
+
+  $('list').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-act]');
+    if (!b) return;
+    const e = entries.find((x) => x.id === b.dataset.id);
+    if (!e) return;
+    switch (b.dataset.act) {
+      case 'toggle':
+        if (expanded.has(e.id)) expanded.delete(e.id); else expanded.add(e.id);
+        render();
+        break;
+      case 'repay':
+        openRepay(e);
+        break;
+      case 'edit':
+        openEntry(e);
+        break;
+      case 'del':
+        if (confirm(`「${e.name}」の記録を削除しますか？\n（元に戻せません）`)) {
+          entries = entries.filter((x) => x.id !== e.id);
+          expanded.delete(e.id);
+          saveEntries();
+          render();
+          toast('削除しました');
+        }
+        break;
+      case 'delrep': {
+        const r = e.repayments.find((x) => x.id === b.dataset.rep);
+        if (r && confirm(`${fmtDate(r.date)} の返済（${fmt(r.amount)}）を削除しますか？`)) {
+          e.repayments = e.repayments.filter((x) => x.id !== r.id);
+          saveEntries();
+          render();
+        }
+        break;
+      }
+    }
+  });
+
+  $('search').addEventListener('input', render);
+  $('sort').addEventListener('change', () => { prefs.sort = $('sort').value; savePrefs(); render(); });
+  $('hideDone').addEventListener('click', () => {
+    prefs.hideDone = !prefs.hideDone;
+    $('hideDone').setAttribute('aria-pressed', String(prefs.hideDone));
+    savePrefs();
+    render();
+  });
+
+  // ---------- シート ----------
+  let lastFocus = null;
+  function openSheet(id) {
+    lastFocus = document.activeElement;
+    const o = $(id);
+    o.classList.add('open');
+    o.setAttribute('aria-hidden', 'false');
+    document.documentElement.classList.add('locked');
+    o.querySelector('.sheet').scrollTop = 0;
+  }
+  function closeSheet(id) {
+    const o = $(id);
+    o.classList.remove('open');
+    o.setAttribute('aria-hidden', 'true');
+    if (!document.querySelector('.overlay.open')) document.documentElement.classList.remove('locked');
+    if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
+  }
+  for (const o of document.querySelectorAll('.overlay')) {
+    o.addEventListener('click', (ev) => {
+      if (ev.target === o || ev.target.closest('[data-close]')) closeSheet(o.id);
+    });
+  }
+  document.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Escape') return;
+    const o = document.querySelector('.overlay.open');
+    if (o) closeSheet(o.id);
+  });
+
+  // ---------- 登録・編集 ----------
+  let editingId = null;
+  const f = {
+    name: $('fName'), kana: $('fKana'), lent: $('fLent'), principal: $('fPrincipal'),
+    surcharge: $('fSurcharge'), interval: $('fInterval'), note: $('fNote'),
+  };
+
+  function openEntry(e, preset = {}) {
+    editingId = e ? e.id : null;
+    $('entryTitle').textContent = e ? '編集' : '新規登録';
+    const src = e || preset;
+    f.name.value = e ? e.name : '';
+    f.kana.value = e ? e.kana : '';
+    f.lent.value = e ? e.lentDate : currentDay;
+    f.principal.value = src.principal != null ? String(src.principal) : '';
+    f.surcharge.value = src.surcharge ? String(src.surcharge) : '';
+    f.interval.value = e && e.interval ? String(e.interval) : '';
+    f.note.value = src.note || '';
+    $('fMemoDate').textContent = fmtDate(e ? e.memoDate : currentDay) + (e ? '' : '（自動）');
+    $('fError').hidden = true;
+    updatePreview();
+    openSheet('entrySheet');
+  }
+
+  function readForm() {
+    return {
+      name: f.name.value.trim(),
+      kana: f.kana.value.trim(),
+      lentDate: validDate(f.lent.value),
+      principal: parseNum(f.principal.value),
+      surcharge: f.surcharge.value.trim() === '' ? 0 : parseNum(f.surcharge.value),
+      interval: f.interval.value.trim() === '' ? 0 : parseNum(f.interval.value),
+      note: f.note.value.trim(),
+    };
+  }
+
+  function validate(v) {
+    if (!v.name) return '名前を入力してください';
+    if (!v.lentDate) return '貸した日を入力してください';
+    if (v.principal === null || v.principal < 0) return '元金を数字で入力してください';
+    if (v.surcharge === null || v.surcharge < 0) return '割増しを数字で入力してください';
+    if (v.interval === null || v.interval < 0 || !Number.isInteger(v.interval)) return '「何日ごとに増える」は整数で入力してください';
+    if (v.surcharge > 0 && v.interval === 0) return '割増しを入れた場合は「何日ごとに増える」も入力してください';
+    return null;
+  }
+
+  function updatePreview() {
+    const v = readForm();
+    if (!v.lentDate || v.principal === null || v.surcharge === null || v.interval === null || v.interval < 0) {
+      $('fPreview').innerHTML = '今日時点の合計：<b>—</b>';
+      return;
+    }
+    const existing = editingId ? entries.find((x) => x.id === editingId) : null;
+    const tmp = {
+      lentDate: v.lentDate, principal: v.principal, surcharge: v.surcharge,
+      interval: Math.floor(v.interval), repayments: existing ? existing.repayments : [],
+    };
+    const c = compute(tmp, toDays(currentDay));
+    let s = `今日時点の合計：<b>${fmt(c.total)}</b>（加算 ${c.periods}回）`;
+    if (c.next) s += `<br>次の加算 ${fmtDate(c.next.date, false)} → ${fmt(c.next.total)}`;
+    else if (!(tmp.surcharge > 0 && tmp.interval > 0)) s += '<br>割増しの自動加算なし';
+    $('fPreview').innerHTML = s;
+  }
+
+  $('entryForm').addEventListener('input', updatePreview);
+  $('entryForm').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-quick]');
+    if (!b) return;
+    const p = parseNum(f.principal.value);
+    if (p === null) { toast('先に元金を入力してください'); f.principal.focus(); return; }
+    f.surcharge.value = String(r2(p * Number(b.dataset.quick)));
+    updatePreview();
+  });
+  $('entryForm').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const v = readForm();
+    const err = validate(v);
+    if (err) {
+      $('fError').textContent = err;
+      $('fError').hidden = false;
+      return;
+    }
+    const data = {
+      name: v.name, kana: v.kana, lentDate: v.lentDate, principal: v.principal,
+      surcharge: v.surcharge, interval: v.interval, note: v.note,
+    };
+    if (editingId) {
+      const e = entries.find((x) => x.id === editingId);
+      if (e) Object.assign(e, data);
+    } else {
+      const e = Object.assign({ id: uid(), memoDate: currentDay, repayments: [] }, data);
+      entries.push(e);
+      expanded.add(e.id);
+    }
+    saveEntries();
+    closeSheet('entrySheet');
+    render();
+    toast(editingId ? '更新しました' : '登録しました');
+  });
+  $('addBtn').addEventListener('click', () => openEntry(null));
+
+  // ---------- 返済 ----------
+  let repayId = null;
+  function openRepay(e) {
+    repayId = e.id;
+    const c = compute(e, toDays(currentDay));
+    $('repayWho').textContent = `${e.name}　残り ${fmt(Math.max(0, c.remaining))}`;
+    $('rDate').value = currentDay;
+    $('rAmount').value = c.remaining > 0 ? String(c.remaining) : '';
+    $('rError').hidden = true;
+    openSheet('repaySheet');
+  }
+  $('repayForm').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const e = entries.find((x) => x.id === repayId);
+    if (!e) return;
+    const date = validDate($('rDate').value);
+    const amount = parseNum($('rAmount').value);
+    const err = !date ? '返済日を入力してください' : !(amount > 0) ? '金額を数字で入力してください' : null;
+    if (err) {
+      $('rError').textContent = err;
+      $('rError').hidden = false;
+      return;
+    }
+    e.repayments.push({ id: uid(), date, amount });
+    saveEntries();
+    closeSheet('repaySheet');
+    expanded.add(e.id);
+    render();
+    toast(compute(e, toDays(currentDay)).done ? '完済しました' : '返済を記録しました');
+  });
+
+  // ---------- バックアップ ----------
+  $('backupBtn').addEventListener('click', () => {
+    $('exportInfo').textContent = `今のデータ ${entries.length}件をファイルに保存します`;
+    openSheet('backupSheet');
+  });
+  $('exportBtn').addEventListener('click', async () => {
+    const json = JSON.stringify({ app: 'kashimemo', version: 1, exportedAt: new Date().toISOString(), entries }, null, 2);
+    const name = `kashimemo-${currentDay}.json`;
+    const file = new File([json], name, { type: 'application/json' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file] });
+        return;
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
+      }
+    }
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  });
+  $('importBtn').addEventListener('click', () => $('importFile').click());
+  $('importFile').addEventListener('change', async () => {
+    const file = $('importFile').files[0];
+    $('importFile').value = '';
+    if (!file) return;
+    let list;
+    try {
+      const data = JSON.parse(await file.text());
+      list = normalizeEntries(Array.isArray(data) ? data : data.entries);
+    } catch (e) {
+      toast('ファイルを読み込めませんでした');
+      return;
+    }
+    if (!list.length) { toast('データが入っていないファイルです'); return; }
+    if (!confirm(`${list.length}件のデータを読み込みます。\n今のデータ（${entries.length}件）は置き換わります。よろしいですか？`)) return;
+    entries = list;
+    expanded.clear();
+    saveEntries();
+    closeSheet('backupSheet');
+    render();
+    toast(`${list.length}件を読み込みました`);
+  });
+
+  // ---------- トースト ----------
+  let toastTimer = null;
+  function toast(msg) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  // ---------- ホーム画面に追加の案内 ----------
+  const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
+  $('installHint').hidden = !(isIOS && !standalone && !prefs.hintClosed);
+  $('hintClose').addEventListener('click', () => {
+    prefs.hintClosed = true;
+    savePrefs();
+    $('installHint').hidden = true;
+  });
+
+  // ---------- 日付が変わったら再計算 ----------
+  function refreshDay() {
+    const d = today();
+    if (d !== currentDay) { currentDay = d; render(); }
+  }
+  setInterval(refreshDay, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshDay(); });
+  window.addEventListener('pageshow', refreshDay);
+  window.addEventListener('storage', (ev) => {
+    if (ev.key === DATA_KEY) { entries = normalizeEntries((load(DATA_KEY, {}) || {}).entries); render(); }
+  });
+
+  // ---------- 起動 ----------
+  $('sort').value = prefs.sort;
+  $('hideDone').setAttribute('aria-pressed', String(prefs.hideDone));
+  renderMenu();
+  renderRate();
+  renderCalcOpen();
+  render();
+
+  if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+})();
+</script>
 </body>
 </html>
