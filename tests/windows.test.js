@@ -55,6 +55,8 @@ test('Windows: CLI をいつもの場所と拡張機能の同梱から見つけ�
   Object.assign(process.env, { USERPROFILE: home, APPDATA: appData, LOCALAPPDATA: localAppData });
   const modPath = require.resolve('../electron/services/agents');
   delete require.cache[modPath];
+  const step = (msg) => console.log(`# windows: ${msg}`);
+  let runner = null;
 
   try {
     const { createAgents } = require('../electron/services/agents');
@@ -63,7 +65,9 @@ test('Windows: CLI をいつもの場所と拡張機能の同梱から見つけ�
     const { createRunner } = require('../electron/services/runner');
 
     const agents = createAgents({ openExternal: () => true });
+    step('detect');
     const found = Object.fromEntries((await agents.detect({ force: true })).agents.map((a) => [a.id, a]));
+    step(JSON.stringify(Object.values(found).map((a) => ({ id: a.id, cli: a.cli, taskFlags: a.taskFlags }))));
 
     assert.equal(found['claude-code'].cli.path, path.join(native, 'claude.exe'));
     assert.equal(found['claude-code'].cli.source, 'VS Code 拡張に同梱');
@@ -79,6 +83,7 @@ test('Windows: CLI をいつもの場所と拡張機能の同梱から見つけ�
 
     // 呼び出し方: .cmd はシェル経由（パスを引用符で囲む）、.exe は直接
     const ws = path.join(root, 'work space');
+    fs.mkdirSync(ws, { recursive: true });
     const codexInv = await agents.invocation('codex', { mode: 'task', prompt: 'x', cwd: ws });
     assert.equal(codexInv.shell, true);
     assert.equal(codexInv.command, `"${path.join(appData, 'npm', 'codex.cmd')}"`);
@@ -87,12 +92,14 @@ test('Windows: CLI をいつもの場所と拡張機能の同梱から見つけ�
 
     // 実行: 依頼文に記号があってもコマンドとして動かない（標準入力で渡すため）
     const git = createGit({ getConfig: () => ({ workspace: ws, gitUserName: 'OZ Test', gitUserEmail: 'oz@example.com' }) });
-    const runner = createRunner({ agents, git, quota: createQuota(), vault: { ensureHub() {}, addNote() {}, appendNote() {} }, dataDir: path.join(root, 'data') });
+    runner = createRunner({ agents, git, quota: createQuota(), vault: { ensureHub() {}, addNote() {}, appendNote() {} }, dataDir: path.join(root, 'data') });
     runner.startLoop();
 
+    step('codex job');
     const job = runner.submit({ agentId: 'codex', prompt: 'API を作る & echo HACKED > hacked.txt | "quoted" %PATH%' });
     await until(() => ['done', 'failed'].includes(runner.get(job.id).status));
     const codexDone = runner.get(job.id);
+    step(`codex: ${codexDone.status} ${codexDone.error ?? ''} ${(codexDone.output ?? []).slice(-5).join(' | ')}`);
     assert.equal(codexDone.status, 'done', codexDone.error ?? '');
     const codexWt = git.worktreePath('codex');
     assert.ok(fs.existsSync(path.join(codexWt, 'api.js')));
@@ -100,15 +107,16 @@ test('Windows: CLI をいつもの場所と拡張機能の同梱から見つけ�
     assert.match(fs.readFileSync(path.join(codexWt, 'prompt.txt'), 'utf8'), /echo HACKED/);
 
     // .exe には引数で渡す。引用符や & がそのまま届けば、node -p が式として実行してファイルを書く
+    step('agy job');
     const agyJob = runner.submit({ agentId: 'antigravity', prompt: 'require("fs").writeFileSync("index.html", "<h1>OZ & \\"quotes\\"</h1>")' });
     await until(() => ['done', 'failed', 'handed-off'].includes(runner.get(agyJob.id).status));
     const agyDone = runner.get(agyJob.id);
+    step(`agy: ${agyDone.status} ${agyDone.error ?? ''} ${(agyDone.output ?? []).slice(-5).join(' | ')}`);
     assert.equal(agyDone.status, 'done', agyDone.error ?? '');
     assert.equal(fs.readFileSync(path.join(git.worktreePath('antigravity'), 'index.html'), 'utf8'), '<h1>OZ & "quotes"</h1>');
     assert.ok(agyDone.commit.files.some((f) => f.file === 'index.html'));
-
-    runner.stopAll();
   } finally {
+    runner?.stopAll();
     Object.assign(process.env, saved);
     delete require.cache[modPath];
   }

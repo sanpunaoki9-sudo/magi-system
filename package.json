@@ -10,7 +10,7 @@
     "dev:web": "node scripts/dev-server.mjs",
     "dist": "electron-builder --config electron-builder.config.cjs --win --x64",
     "dist:dir": "electron-builder --config electron-builder.config.cjs --dir",
-    "test": "node --test \"tests/**/*.test.js\""
+    "test": "node --test --test-force-exit \"tests/**/*.test.js\""
   },
   "dependencies": {
     "3d-force-graph": "^1.80.1",
