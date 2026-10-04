@@ -13,6 +13,13 @@
 <title>貸しメモ</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
+<script>
+  // ロック中は中身が一瞬も見えないよう、描画前に隠しておく
+  try {
+    var lk = JSON.parse(localStorage.getItem('kashimemo.lock.v1') || 'null');
+    if (lk && lk.pin) document.documentElement.classList.add('app-locked');
+  } catch (e) {}
+</script>
 <style>
 :root {
   --bg: #0b0b0c;
@@ -415,6 +422,46 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
 .viewer-img img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; }
 .viewer-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
+/* ---------- ロック画面 ---------- */
+.top-actions { display: flex; gap: 8px; }
+.icon-btn svg { width: 20px; height: 20px; display: block; }
+html.app-locked .app, html.app-locked .fab, html.app-locked .overlay, html.app-locked .viewer,
+html.app-covered .app, html.app-covered .fab, html.app-covered .overlay, html.app-covered .viewer { visibility: hidden; }
+.lock {
+  position: fixed; inset: 0; z-index: 100;
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  padding: calc(var(--safe-t) + 16px) 16px calc(var(--safe-b) + 16px);
+  background: var(--bg);
+  overflow: hidden;
+}
+html.app-locked .lock, html.app-covered .lock, .lock.show { display: flex; }
+html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidden; }
+.lock .tape-band { position: absolute; top: calc(var(--safe-t) + 24px); left: 0; right: 0; margin: 0; }
+.lock-title { position: relative; font-size: 28px; font-weight: 900; letter-spacing: .04em; margin-bottom: 18px; }
+.lock-title span { color: var(--yellow); }
+.pad-area { position: relative; display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 320px; }
+.lock-msg { margin: 0 0 14px; min-height: 24px; text-align: center; font-size: 16px; font-weight: 700; color: var(--muted); }
+.lock-msg.err { color: var(--red); }
+.dots { display: flex; gap: 14px; height: 16px; margin-bottom: 28px; }
+.dots i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--yellow); }
+.dots i.on { background: var(--yellow); }
+.dots.shake { animation: shake .35s; }
+@keyframes shake { 20%, 60% { transform: translateX(-10px); } 40%, 80% { transform: translateX(10px); } }
+.keypad { display: grid; grid-template-columns: repeat(3, 76px); gap: 16px 24px; }
+.key {
+  width: 76px; height: 76px; border-radius: 50%;
+  border: 1px solid var(--line); background: var(--surface-2); color: var(--text);
+  font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.key:active { background: var(--yellow); color: var(--ink); }
+.key.fn { background: transparent; border-color: transparent; font-size: 15px; font-weight: 800; color: var(--yellow); }
+.key.fn:active { background: var(--surface-2); color: var(--yellow); }
+.key[hidden] { display: block !important; visibility: hidden; }
+.lock-links { display: flex; justify-content: center; gap: 20px; margin-top: 22px; min-height: 24px; }
+.lock-status { margin: 0 0 12px; padding: 12px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); font-weight: 800; }
+.lock-status b { color: var(--yellow); }
+.lock-status.off b { color: var(--muted); }
+
 .backup-list { display: grid; gap: 10px; }
 .backup-list .btn { width: 100%; text-align: left; padding: 12px 14px; }
 .backup-list .btn small { display: block; font-weight: 600; font-size: 13px; color: var(--muted); }
@@ -426,7 +473,9 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
   position: fixed; z-index: 60; left: 50%;
   bottom: calc(96px + var(--safe-b));
   transform: translate(-50%, 20px);
+  width: max-content;
   max-width: calc(100% - 32px);
+  text-align: center;
   padding: 10px 16px;
   border-radius: 999px; border: 2px solid var(--yellow);
   background: var(--ink); color: var(--text);
@@ -452,7 +501,12 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
 <div class="app">
   <header class="top">
     <h1 class="title">貸し<span>メモ</span></h1>
-    <button class="icon-btn" id="backupBtn" type="button">バックアップ</button>
+    <div class="top-actions">
+      <button class="icon-btn" id="lockBtn" type="button" aria-label="ロック設定">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+      </button>
+      <button class="icon-btn" id="backupBtn" type="button">バックアップ</button>
+    </div>
   </header>
 
   <div class="tape-band" aria-hidden="true">
@@ -639,6 +693,50 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
       <input type="file" id="importFile" accept="application/json,.json" hidden>
     </div>
     <p class="backup-note">データはこのスマホの中にだけ保存されています。機種変更のときや念のために、ときどき書き出して「ファイル」アプリなどに保存してください。</p>
+  </div>
+</div>
+
+<!-- ロック設定シート -->
+<div class="overlay" id="lockSheet" aria-hidden="true">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="lockTitle">
+    <div class="sheet-head">
+      <div class="row">
+        <h2 id="lockTitle">ロック</h2>
+        <button class="close" type="button" data-close aria-label="閉じる">×</button>
+      </div>
+    </div>
+    <div id="lockBody"></div>
+  </div>
+</div>
+
+<!-- ロック画面（パスコード入力） -->
+<div class="lock" id="lock">
+  <div class="tape-band" aria-hidden="true">
+    <div class="tape b"><span>CAUTION　CAUTION　CAUTION　CAUTION　CAUTION　CAUTION　CAUTION　CAUTION　CAUTION　CAUTION</span></div>
+    <div class="tape a"><span>KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT　KEEP OUT</span></div>
+  </div>
+  <div class="lock-title">貸し<span>メモ</span></div>
+  <div class="pad-area">
+    <p class="lock-msg" id="lockMsg" role="status" aria-live="polite">パスコードを入力</p>
+    <div class="dots" id="lockDots" aria-hidden="true"></div>
+    <div class="keypad" id="keypad">
+      <button class="key" type="button" data-k="1">1</button>
+      <button class="key" type="button" data-k="2">2</button>
+      <button class="key" type="button" data-k="3">3</button>
+      <button class="key" type="button" data-k="4">4</button>
+      <button class="key" type="button" data-k="5">5</button>
+      <button class="key" type="button" data-k="6">6</button>
+      <button class="key" type="button" data-k="7">7</button>
+      <button class="key" type="button" data-k="8">8</button>
+      <button class="key" type="button" data-k="9">9</button>
+      <button class="key fn" type="button" id="padFace">顔認証</button>
+      <button class="key" type="button" data-k="0">0</button>
+      <button class="key fn" type="button" data-k="del" aria-label="1文字消す">⌫</button>
+    </div>
+    <div class="lock-links">
+      <button class="mini" type="button" id="padCancel">キャンセル</button>
+      <button class="mini" type="button" id="padForgot">パスコードを忘れた場合</button>
+    </div>
   </div>
 </div>
 
@@ -956,6 +1054,7 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
 
   // ---------- 一覧 ----------
   function render() {
+    if (!unlocked) return;
     const T = toDays(currentDay);
     const q = norm($('search').value);
     let rows = entries.map((e) => ({ e, c: compute(e, T) }));
@@ -1174,14 +1273,16 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
     hydratePhotos($('fPhotos'));
   }
   $('fPhotos').addEventListener('click', (ev) => {
-    if (ev.target.closest('#fPhotoAdd')) { $('fPhotoInput').click(); return; }
+    if (ev.target.closest('#fPhotoAdd')) { holdLock = true; $('fPhotoInput').click(); return; }
     const rm = ev.target.closest('[data-rm]');
     if (!rm) return;
     const [p] = formPhotos.splice(Number(rm.dataset.rm), 1);
     if (p.isNew) URL.revokeObjectURL(p.url); else removedPhotos.push(p.id);
     renderFormPhotos();
   });
+  $('fPhotoInput').addEventListener('cancel', () => { holdLock = false; });
   $('fPhotoInput').addEventListener('change', async () => {
+    holdLock = false;
     const files = Array.from($('fPhotoInput').files || []);
     $('fPhotoInput').value = '';
     let failed = 0;
@@ -1370,11 +1471,14 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
     const name = `kashimemo-${currentDay}.json`;
     const file = new File([json], name, { type: 'application/json' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      holdLock = true;
       try {
         await navigator.share({ files: [file] });
         return;
       } catch (err) {
         if (err && err.name === 'AbortError') return;
+      } finally {
+        holdLock = false;
       }
     }
     const url = URL.createObjectURL(file);
@@ -1386,8 +1490,10 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   });
-  $('importBtn').addEventListener('click', () => $('importFile').click());
+  $('importBtn').addEventListener('click', () => { holdLock = true; $('importFile').click(); });
+  $('importFile').addEventListener('cancel', () => { holdLock = false; });
   $('importFile').addEventListener('change', async () => {
+    holdLock = false;
     const file = $('importFile').files[0];
     $('importFile').value = '';
     if (!file) return;
@@ -1494,13 +1600,350 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
     if (ev.key === DATA_KEY) { entries = normalizeEntries((load(DATA_KEY, {}) || {}).entries); render(); }
   });
 
+  // ---------- ロック（パスコード・顔認証） ----------
+  // 端末の中だけで完結する「開くときの鍵」。データ自体は暗号化していない
+  const LOCK_KEY = 'kashimemo.lock.v1';
+  const FAIL_KEY = 'kashimemo.lockfail.v1';
+  const PIN_ITER = 150000;
+  let lockCfg = load(LOCK_KEY, null);
+  const lockOn = () => !!(lockCfg && lockCfg.pin && lockCfg.pin.hash);
+  let unlocked = !lockOn();
+  let holdLock = false;   // 写真選択・共有などで一時的にアプリを離れるときは鍵をかけない
+  let authBusy = false;   // 顔認証の画面が出ている間
+  let hiddenAt = 0;
+  let padState = null;         // { mode: unlock|set|confirm|verify, len, input, first, onOk }
+  let padBusy = false;
+  const html = document.documentElement;
+
+  const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const unb64u = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+  const randomBytes = (n) => crypto.getRandomValues(new Uint8Array(n));
+  const saveLock = () => (lockCfg ? store(LOCK_KEY, lockCfg) : localStorage.removeItem(LOCK_KEY));
+
+  async function hashPin(pin, salt, iter) {
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: unb64u(salt), iterations: iter }, key, 256);
+    return b64u(bits);
+  }
+  async function checkPin(pin) {
+    return lockOn() && (await hashPin(pin, lockCfg.pin.salt, lockCfg.pin.iter)) === lockCfg.pin.hash;
+  }
+  async function savePin(pin) {
+    const salt = b64u(randomBytes(16));
+    const hash = await hashPin(pin, salt, PIN_ITER);
+    lockCfg = Object.assign({ cred: null, after: 0 }, lockCfg || {}, { pin: { salt, hash, iter: PIN_ITER, len: pin.length } });
+    saveLock();
+  }
+
+  // 5回まちがえたら30秒待つ
+  const loadFails = () => load(FAIL_KEY, { n: 0, until: 0 });
+  const lockWait = () => Math.max(0, Math.ceil((loadFails().until - Date.now()) / 1000));
+  function addFail() {
+    const f = loadFails();
+    f.n += 1;
+    if (f.n >= 5) f.until = Date.now() + 30000;
+    store(FAIL_KEY, f);
+  }
+  const clearFails = () => { try { localStorage.removeItem(FAIL_KEY); } catch (e) {} };
+
+  async function faceAvailable() {
+    try {
+      return !!(window.PublicKeyCredential && window.isSecureContext
+        && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable());
+    } catch (e) {
+      return false;
+    }
+  }
+  async function faceRegister() {
+    const cred = await navigator.credentials.create({
+      publicKey: {
+        rp: { name: '貸しメモ' },
+        user: { id: randomBytes(16), name: '貸しメモ', displayName: '貸しメモ' },
+        challenge: randomBytes(32),
+        pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+        timeout: 60000,
+        attestation: 'none',
+      },
+    });
+    lockCfg.cred = b64u(cred.rawId);
+    saveLock();
+  }
+  async function faceVerify() {
+    const a = await navigator.credentials.get({
+      publicKey: {
+        challenge: randomBytes(32),
+        allowCredentials: [{ type: 'public-key', id: unb64u(lockCfg.cred) }],
+        userVerification: 'required',
+        timeout: 60000,
+      },
+    });
+    // 顔認証（または端末のパスコード）で本人確認できたか（UV フラグ）
+    return !!(a && (new Uint8Array(a.response.authenticatorData)[32] & 0x04));
+  }
+
+  function drawDots() {
+    $('lockDots').innerHTML = Array.from({ length: padState.len }, (_, i) => `<i class="${i < padState.input.length ? 'on' : ''}"></i>`).join('');
+  }
+  function padMsg(text, err = false) {
+    $('lockMsg').textContent = text;
+    $('lockMsg').classList.toggle('err', err);
+  }
+  function setPad(p) {
+    padState = Object.assign({ input: '' }, p);
+    padMsg(p.msg);
+    $('lock').classList.add('show');
+    $('padCancel').hidden = p.mode === 'unlock';
+    $('padForgot').hidden = p.mode !== 'unlock';
+    $('padFace').hidden = !(p.mode === 'unlock' && lockCfg && lockCfg.cred);
+    drawDots();
+  }
+  function hidePad() {
+    padState = null;
+    $('lock').classList.remove('show');
+  }
+  function padError(text) {
+    padState.input = '';
+    drawDots();
+    padMsg(text, true);
+    const d = $('lockDots');
+    d.classList.remove('shake');
+    void d.offsetWidth;
+    d.classList.add('shake');
+  }
+
+  function lock(autoFace = true) {
+    if (!lockOn()) return;
+    unlocked = false;
+    html.classList.add('app-locked');
+    html.classList.remove('app-covered');
+    for (const o of document.querySelectorAll('.overlay.open')) closeSheet(o.id);
+    if (!$('viewer').hidden) closeViewer();
+    $('list').innerHTML = '';
+    $('summary').innerHTML = '';
+    setPad({ mode: 'unlock', len: lockCfg.pin.len, msg: 'パスコードを入力' });
+    const wait = lockWait();
+    if (wait) padMsg(`${wait}秒後にもう一度お試しください`, true);
+    else if (autoFace && lockCfg.cred) tryFace(true);
+  }
+  function unlock() {
+    unlocked = true;
+    hidePad();
+    html.classList.remove('app-locked', 'app-covered');
+    refreshDay();
+    render();
+  }
+
+  async function tryFace(auto = false) {
+    if (!lockCfg || !lockCfg.cred || authBusy || unlocked) return;
+    authBusy = true;
+    try {
+      if (await faceVerify()) { clearFails(); unlock(); }
+      else padMsg('顔認証できませんでした。パスコードを入力', true);
+    } catch (e) {
+      if (!auto) padMsg('顔認証できませんでした。パスコードを入力', true);
+    } finally {
+      authBusy = false;
+    }
+  }
+
+  async function submitPad() {
+    padBusy = true;
+    const v = padState.input;
+    try {
+      switch (padState.mode) {
+        case 'unlock': {
+          const wait = lockWait();
+          if (wait) { padError(`${wait}秒後にもう一度お試しください`); break; }
+          if (await checkPin(v)) { clearFails(); unlock(); break; }
+          addFail();
+          const w = lockWait();
+          padError(w ? `5回まちがえました。${w}秒後にもう一度お試しください` : 'パスコードが違います');
+          break;
+        }
+        case 'set':
+          padState.first = v;
+          padState.mode = 'confirm';
+          padState.input = '';
+          drawDots();
+          padMsg('確認のため、もう一度入力');
+          break;
+        case 'confirm':
+          if (v !== padState.first) {
+            padState.mode = 'set';
+            padState.first = null;
+            padError('一致しませんでした。新しいパスコードをもう一度');
+            break;
+          }
+          await savePin(v);
+          hidePad();
+          toast('パスコードを設定しました');
+          break;
+        case 'verify':
+          if (await checkPin(v)) { const ok = padState.onOk; hidePad(); ok(); }
+          else padError('パスコードが違います');
+          break;
+      }
+    } catch (e) {
+      padError('この画面ではパスコードを使えません（https で開いてください）');
+    } finally {
+      padBusy = false;
+    }
+  }
+
+  function padKey(k) {
+    if (!padState || padBusy) return;
+    if (k === 'del') { padState.input = padState.input.slice(0, -1); drawDots(); return; }
+    if (padState.input.length >= padState.len) return;
+    padState.input += k;
+    drawDots();
+    if (padState.input.length === padState.len) setTimeout(submitPad, 80);
+  }
+  $('keypad').addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-k]');
+    if (b) padKey(b.dataset.k);
+  });
+  document.addEventListener('keydown', (ev) => {
+    if (!padState) return;
+    if (/^[0-9]$/.test(ev.key)) padKey(ev.key);
+    else if (ev.key === 'Backspace') padKey('del');
+  });
+  $('padFace').addEventListener('click', () => tryFace(false));
+  $('padCancel').addEventListener('click', hidePad);
+  $('padForgot').addEventListener('click', async () => {
+    if (!confirm('パスコードを忘れた場合は、このアプリのデータをすべて消して最初からやり直すしかありません。\n（バックアップのファイルがあれば、あとで読み込んで戻せます）\n\n続けますか？')) return;
+    if (!confirm('本当にすべてのデータを消しますか？　元に戻せません。')) return;
+    try {
+      for (const k of [DATA_KEY, PREF_KEY, LOCK_KEY, FAIL_KEY]) localStorage.removeItem(k);
+      if (dbPromise) (await dbPromise).close();
+      await new Promise((resolve) => {
+        const req = indexedDB.deleteDatabase('kashimemo');
+        req.onsuccess = req.onerror = req.onblocked = resolve;
+      });
+    } catch (e) {}
+    location.reload();
+  });
+
+  // ---------- ロック設定シート ----------
+  async function renderLockSettings() {
+    const body = $('lockBody');
+    if (!window.isSecureContext || !(window.crypto && crypto.subtle)) {
+      body.innerHTML = '<p class="backup-note">ロックは、ホーム画面のアイコン（https のページ）から開いたときに使えます。</p>';
+      return;
+    }
+    if (!lockOn()) {
+      body.innerHTML = `
+        <div class="lock-status off">ロック：<b>オフ</b></div>
+        <div class="backup-list">
+          <button class="btn primary" type="button" data-lock="set6">6桁のパスコードを設定<small>おすすめ。設定したあと顔認証もオンにできます</small></button>
+          <button class="btn" type="button" data-lock="set4">4桁のパスコードを設定</button>
+        </div>
+        <p class="backup-note">オンにすると、アプリを開くたびにパスコード（または顔認証）が必要になります。</p>`;
+      return;
+    }
+    const face = await faceAvailable();
+    const after = lockCfg.after || 0;
+    body.innerHTML = `
+      <div class="lock-status">ロック：<b>オン</b>（パスコード${lockCfg.pin.len}桁${lockCfg.cred ? '＋顔認証' : ''}）</div>
+      <div class="backup-list">
+        ${face
+          ? (lockCfg.cred
+            ? '<button class="btn" type="button" data-lock="faceOff">顔認証をオフにする</button>'
+            : '<button class="btn primary" type="button" data-lock="faceOn">顔認証（Face ID）をオンにする<small>iPhone の確認画面が出たら「続ける」を押してください</small></button>')
+          : '<p class="backup-note" style="margin:0">この画面では顔認証が使えません。ホーム画面のアイコンから開くと使える場合があります。</p>'}
+        <div class="field" style="margin:4px 0 0">
+          <label for="lockAfter">アプリを離れてから鍵をかけるまで</label>
+          <select class="input" id="lockAfter">
+            <option value="0"${after === 0 ? ' selected' : ''}>すぐ</option>
+            <option value="60"${after === 60 ? ' selected' : ''}>1分後</option>
+            <option value="300"${after === 300 ? ' selected' : ''}>5分後</option>
+          </select>
+        </div>
+        <button class="btn" type="button" data-lock="now">今すぐロックする</button>
+        <button class="btn" type="button" data-lock="change">パスコードを変更</button>
+        <button class="btn danger" type="button" data-lock="off">ロックをオフにする</button>
+      </div>
+      <p class="backup-note">アプリを開くときの鍵です。iPhone 本体のロック（パスコード）と合わせて使ってください。パスコードを忘れるとデータを消すしかないので、バックアップもときどき取っておいてください。</p>`;
+  }
+
+  $('lockBtn').addEventListener('click', () => { renderLockSettings(); openSheet('lockSheet'); });
+  $('lockBody').addEventListener('change', (ev) => {
+    if (ev.target.id !== 'lockAfter') return;
+    lockCfg.after = Number(ev.target.value);
+    saveLock();
+    toast('保存しました');
+  });
+  $('lockBody').addEventListener('click', async (ev) => {
+    const b = ev.target.closest('[data-lock]');
+    if (!b) return;
+    switch (b.dataset.lock) {
+      case 'set6':
+      case 'set4':
+        closeSheet('lockSheet');
+        setPad({ mode: 'set', len: b.dataset.lock === 'set6' ? 6 : 4, msg: '新しいパスコードを入力' });
+        break;
+      case 'faceOn':
+        authBusy = true;
+        try {
+          await faceRegister();
+          toast('顔認証をオンにしました');
+        } catch (e) {
+          toast(e && e.name === 'NotAllowedError' ? 'キャンセルされました' : '顔認証を設定できませんでした');
+        } finally {
+          authBusy = false;
+          renderLockSettings();
+        }
+        break;
+      case 'faceOff':
+        lockCfg.cred = null;
+        saveLock();
+        renderLockSettings();
+        toast('顔認証をオフにしました');
+        break;
+      case 'now':
+        closeSheet('lockSheet');
+        lock(false);
+        break;
+      case 'change':
+        closeSheet('lockSheet');
+        setPad({
+          mode: 'verify', len: lockCfg.pin.len, msg: '今のパスコードを入力',
+          onOk: () => setPad({ mode: 'set', len: lockCfg.pin.len, msg: '新しいパスコードを入力' }),
+        });
+        break;
+      case 'off':
+        closeSheet('lockSheet');
+        setPad({
+          mode: 'verify', len: lockCfg.pin.len, msg: 'ロックをオフにするにはパスコードを入力',
+          onOk: () => { lockCfg = null; saveLock(); clearFails(); toast('ロックをオフにしました'); },
+        });
+        break;
+    }
+  });
+
+  // アプリを離れたら中身を隠し、設定した時間が過ぎていたら鍵をかける
+  document.addEventListener('visibilitychange', () => {
+    if (!lockOn() || authBusy) return;
+    if (document.hidden) {
+      if (holdLock || !unlocked) return;
+      hiddenAt = Date.now();
+      html.classList.add('app-covered');
+      return;
+    }
+    if (holdLock) { holdLock = false; hiddenAt = 0; html.classList.remove('app-covered'); return; }
+    if (unlocked && hiddenAt && Date.now() - hiddenAt >= (lockCfg.after || 0) * 1000) lock();
+    else html.classList.remove('app-covered');
+    hiddenAt = 0;
+  });
+
   // ---------- 起動 ----------
   $('sort').value = prefs.sort;
   $('hideDone').setAttribute('aria-pressed', String(prefs.hideDone));
   renderMenu();
   renderRate();
   renderCalcOpen();
-  render();
+  if (lockOn()) lock();
+  else { html.classList.remove('app-locked'); render(); }
 
   if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {

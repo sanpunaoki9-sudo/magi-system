@@ -1,5 +1,5 @@
 // オフラインでも開けるようにアプリ本体をキャッシュする（データ自体は localStorage にあり、ここでは扱わない）
-const CACHE = 'kashimemo-v3';
+const CACHE = 'kashimemo-v4';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (event) => {
