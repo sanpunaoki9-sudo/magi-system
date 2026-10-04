@@ -268,6 +268,7 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
 }
 .next b { color: var(--yellow); }
 .next.ok b { color: var(--green); }
+.next.due-total { border: 1px solid #4a4000; background: var(--yellow-dim); color: #ffe680; }
 .reps h3 { margin: 16px 0 4px; font-size: 13px; font-weight: 800; color: var(--muted); }
 .rep { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .rep .d { flex: 1; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -843,10 +844,11 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
     if (!e.dueDate || c.done) return null;
     const d = toDays(e.dueDate) - T;
     const day = fmtDate(e.dueDate, false);
-    if (d < 0) return { cls: 'late', text: `返済日 ${day}・${-d}日過ぎ` };
-    if (d === 0) return { cls: 'late', text: '今日が返済日' };
-    if (d <= 3) return { cls: 'soon', text: `返済日 ${day}・あと${d}日` };
-    return { cls: '', text: `返済日 ${day}` };
+    const amt = ` → ${fmt(c.due.remaining)}`;
+    if (d < 0) return { cls: 'late', text: `返済日 ${day}（${-d}日過ぎ）` };
+    if (d === 0) return { cls: 'late', text: `今日が返済日${amt}` };
+    if (d <= 3) return { cls: 'soon', text: `返済日 ${day}（あと${d}日）${amt}` };
+    return { cls: '', text: `返済日 ${day}${amt}` };
   }
 
   // ---------- 計算 ----------
@@ -877,8 +879,15 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
       const nd = L + (periods + 1) * e.interval;
       next = { date: fromDays(nd), daysLeft: nd - T, total: r2(totalAt(nd)) };
     }
+    // 返済予定日の時点での合計（割増しを返済日まで足したもの）と、そこから返済済みを引いた額
+    let due = null;
+    if (!done && e.dueDate) {
+      const dd = toDays(e.dueDate);
+      const dueTotal = r2(totalAt(dd));
+      due = { total: dueTotal, periods: periodsAt(dd), remaining: r2(Math.max(0, dueTotal - paidAll)) };
+    }
     return {
-      periods, total, paid: r2(paidAll), remaining, done, next,
+      periods, total, paid: r2(paidAll), remaining, done, next, due,
       settledDate: done ? fromDays(settledDay) : null,
       elapsed: Math.max(0, T - L),
       reps,
@@ -1007,6 +1016,10 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
     if (c.done) next = `<div class="next ok"><b>完済</b>　${fmtDate(c.settledDate)}${c.remaining < 0 ? `（${fmt(-c.remaining)} 多く返済）` : ''}</div>`;
     else if (c.next) next = `<div class="next">次の加算 <b>${fmtDate(c.next.date, false)}</b>（${c.next.daysLeft === 1 ? '明日' : `あと${c.next.daysLeft}日`}）→ 合計 <b>${fmt(c.next.total)}</b></div>`;
     else next = `<div class="next">割増しの自動加算なし</div>`;
+    if (c.due) {
+      next += `<div class="next due-total">返済日 <b>${fmtDate(e.dueDate)}</b> までの合計 <b>${fmt(c.due.total)}</b>（加算 ${c.due.periods}回）`
+        + (c.paid > 0 ? `<br>返済済みを引くと <b>${fmt(c.due.remaining)}</b>` : '') + `</div>`;
+    }
 
     const reps = c.reps.length
       ? c.reps.map((r, i) => `
@@ -1242,11 +1255,13 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
     const tmp = {
       lentDate: v.lentDate, principal: v.principal, surcharge: v.surcharge,
       interval: Math.floor(v.interval), repayments: existing ? existing.repayments : [],
+      dueDate: v.dueDate || '',
     };
     const c = compute(tmp, toDays(currentDay));
     let s = `今日時点の合計：<b>${fmt(c.total)}</b>（加算 ${c.periods}回）`;
     if (c.next) s += `<br>次の加算 ${fmtDate(c.next.date, false)} → ${fmt(c.next.total)}`;
     else if (!(tmp.surcharge > 0 && tmp.interval > 0)) s += '<br>割増しの自動加算なし';
+    if (c.due) s += `<br>返済日 ${fmtDate(tmp.dueDate, false)} までの合計：<b>${fmt(c.due.total)}</b>（加算 ${c.due.periods}回）`;
     $('fPreview').innerHTML = s;
   }
 
