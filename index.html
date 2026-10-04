@@ -17,7 +17,7 @@
   // ロック中は中身が一瞬も見えないよう、描画前に隠しておく
   try {
     var lk = JSON.parse(localStorage.getItem('kashimemo.lock.v1') || 'null');
-    if (lk && lk.pin) document.documentElement.classList.add('app-locked');
+    if (lk && (lk.wrap || lk.pin)) document.documentElement.classList.add('app-locked');
   } catch (e) {}
 </script>
 <style>
@@ -457,6 +457,10 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
 .key.fn { background: transparent; border-color: transparent; font-size: 15px; font-weight: 800; color: var(--yellow); }
 .key.fn:active { background: var(--surface-2); color: var(--yellow); }
 .key[hidden] { display: block !important; visibility: hidden; }
+.pass-form { display: flex; gap: 8px; width: 100%; }
+.pass-form .input { flex: 1; text-align: center; letter-spacing: .1em; }
+.pass-form .btn { flex: none; width: 72px; }
+.pass-face { width: 100%; margin-top: 12px; color: var(--yellow); }
 .lock-links { display: flex; justify-content: center; gap: 20px; margin-top: 22px; min-height: 24px; }
 .lock-status { margin: 0 0 12px; padding: 12px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); font-weight: 800; }
 .lock-status b { color: var(--yellow); }
@@ -709,6 +713,26 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
   </div>
 </div>
 
+<!-- パスワード入力（暗号化バックアップの読み込み用） -->
+<div class="overlay" id="askSheet" aria-hidden="true">
+  <form class="sheet" id="askForm" role="dialog" aria-modal="true" aria-labelledby="askTitle" autocomplete="off">
+    <div class="sheet-head">
+      <div class="row">
+        <h2 id="askTitle">暗号化されたファイル</h2>
+        <button class="close" type="button" data-close aria-label="閉じる">×</button>
+      </div>
+    </div>
+    <div class="field">
+      <label for="askInput" id="askMsg"></label>
+      <input class="input" id="askInput" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+    </div>
+    <div class="sheet-actions">
+      <button class="btn" type="button" data-close>キャンセル</button>
+      <button class="btn primary" type="submit">読み込む</button>
+    </div>
+  </form>
+</div>
+
 <!-- ロック画面（パスコード入力） -->
 <div class="lock" id="lock">
   <div class="tape-band" aria-hidden="true">
@@ -733,6 +757,11 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
       <button class="key" type="button" data-k="0">0</button>
       <button class="key fn" type="button" data-k="del" aria-label="1文字消す">⌫</button>
     </div>
+    <form class="pass-form" id="passForm" hidden autocomplete="off">
+      <input class="input" id="passInput" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go" aria-label="パスワード">
+      <button class="btn primary" type="submit">OK</button>
+    </form>
+    <button class="btn pass-face" type="button" id="passFace" hidden>顔認証で開く</button>
     <div class="lock-links">
       <button class="mini" type="button" id="padCancel">キャンセル</button>
       <button class="mini" type="button" id="padForgot">パスコードを忘れた場合</button>
@@ -784,8 +813,74 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
       return false;
     }
   }
-  const saveEntries = () => store(DATA_KEY, { version: 1, entries });
   const savePrefs = () => store(PREF_KEY, prefs);
+
+  // ---------- 暗号化 ----------
+  // ロックをオンにすると、データと写真を AES-256-GCM で暗号化して保存する。
+  // データ用の鍵（DEK）は「パスワードから作った鍵」と「顔認証（パスキーの PRF）から作った鍵」で包んで保存し、
+  // 鍵そのものはロック解除中のメモリにしか置かない
+  const LOCK_KEY = 'kashimemo.lock.v1';
+  const KDF_ITER = 600000;
+  let lockCfg = load(LOCK_KEY, null);
+  const isLegacyLock = () => !!(lockCfg && !lockCfg.wrap && lockCfg.pin && lockCfg.pin.hash);
+  const lockOn = () => !!(lockCfg && (lockCfg.wrap || isLegacyLock()));
+  let unlocked = !lockOn();
+  let dek = null;
+  let dekRaw = null;
+  const te = new TextEncoder();
+  const td = new TextDecoder();
+  const randomBytes = (n) => crypto.getRandomValues(new Uint8Array(n));
+  function b64u(buf) {
+    const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  const unb64u = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+  const saveLock = () => (lockCfg ? store(LOCK_KEY, lockCfg) : localStorage.removeItem(LOCK_KEY));
+
+  const aesKey = (raw) => crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
+  async function seal(key, bytes) {
+    const iv = randomBytes(12);
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, bytes);
+    return { iv: b64u(iv), ct: b64u(ct) };
+  }
+  async function unseal(key, box) {
+    return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64u(box.iv) }, key, unb64u(box.ct)));
+  }
+  async function secretKey(secret, kdf) {
+    const base = await crypto.subtle.importKey('raw', te.encode(secret), 'PBKDF2', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt: unb64u(kdf.salt), iterations: kdf.iter },
+      base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  async function wrapWithSecret(secret, raw) {
+    const kdf = { salt: b64u(randomBytes(16)), iter: KDF_ITER };
+    return { kdf, wrap: await seal(await secretKey(secret, kdf), raw) };
+  }
+  // パスワードで包んだ鍵を開く。パスワードが違えば null
+  async function unwrapWithSecret(secret, kdf, wrap) {
+    try {
+      return await unseal(await secretKey(secret, kdf), wrap);
+    } catch (e) {
+      return null;
+    }
+  }
+  async function setDEK(raw) { dekRaw = raw; dek = await aesKey(raw); }
+  function dropDEK() { dek = null; dekRaw = null; }
+
+  // 保存は順番に行う（暗号化は非同期のため）
+  let saveChain = Promise.resolve();
+  function saveEntries() {
+    if (!unlocked) return saveChain;
+    if (!lockOn()) { store(DATA_KEY, { version: 1, entries }); return saveChain; }
+    const key = dek;
+    if (!key) return saveChain;
+    const bytes = te.encode(JSON.stringify(entries));
+    saveChain = saveChain
+      .then(async () => { store(DATA_KEY, { version: 3, enc: await seal(key, bytes) }); })
+      .catch(() => toast('保存できませんでした'));
+    return saveChain;
+  }
 
   // ---------- 数値・日付 ----------
   const pad = (n) => String(n).padStart(2, '0');
@@ -877,7 +972,25 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
       tx.onerror = tx.onabort = () => reject(tx.error);
     });
   }
-  const photoPut = (id, blob) => photoTx('readwrite', (st) => { st.put({ id, blob }); });
+  async function photoPut(id, blob) {
+    if (lockOn()) {
+      if (!dek) throw new Error('locked');
+      const iv = randomBytes(12);
+      const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, dek, await blob.arrayBuffer());
+      return photoTx('readwrite', (st) => { st.put({ id, iv, ct, type: blob.type || 'image/jpeg' }); });
+    }
+    return photoTx('readwrite', (st) => { st.put({ id, blob }); });
+  }
+  // 保存形式（暗号化あり／なし）に関係なく写真の Blob を取り出す
+  async function photoBlob(rec) {
+    if (!rec) return null;
+    if (rec.ct) {
+      if (!dek) return null;
+      const buf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: rec.iv }, dek, rec.ct);
+      return new Blob([buf], { type: rec.type || 'image/jpeg' });
+    }
+    return rec.blob || null;
+  }
   const photoGet = (id) => photoTx('readonly', (st) => st.get(id));
   const photoGetAll = () => photoTx('readonly', (st) => st.getAll());
   const photoClear = () => photoTx('readwrite', (st) => { st.clear(); });
@@ -892,9 +1005,9 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
   const photoURLs = new Map();
   async function photoURL(id) {
     if (photoURLs.has(id)) return photoURLs.get(id);
-    const rec = await photoGet(id);
-    if (!rec || !rec.blob) return null;
-    const u = URL.createObjectURL(rec.blob);
+    const blob = await photoBlob(await photoGet(id));
+    if (!blob) return null;
+    const u = URL.createObjectURL(blob);
     photoURLs.set(id, u);
     return u;
   }
@@ -993,7 +1106,8 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
   }
 
   // ---------- 状態 ----------
-  let entries = normalizeEntries((load(DATA_KEY, {}) || {}).entries);
+  // ロック中は暗号化されたままにしておき、解除してから読み込む
+  let entries = lockOn() ? [] : normalizeEntries((load(DATA_KEY, {}) || {}).entries);
   const prefs = Object.assign({ rate: 0.1, sort: 'kana', hideDone: false, calcOpen: true, hintClosed: false }, load(PREF_KEY, {}));
   if (![0.1, 0.2, 0.3].includes(prefs.rate)) prefs.rate = 0.1;
   const expanded = new Set();
@@ -1454,7 +1568,8 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
   // ---------- バックアップ ----------
   $('backupBtn').addEventListener('click', () => {
     const n = entries.reduce((s, e) => s + e.photos.length, 0);
-    $('exportInfo').textContent = `今のデータ ${entries.length}件${n ? `（写真${n}枚も含む）` : ''}をファイルに保存します`;
+    $('exportInfo').textContent = `今のデータ ${entries.length}件${n ? `（写真${n}枚も含む）` : ''}をファイルに保存します`
+      + (lockOn() ? `。ファイルは暗号化され、読み込むときに今の${secretWord()}が必要です` : '');
     openSheet('backupSheet');
   });
   $('exportBtn').addEventListener('click', async () => {
@@ -1462,12 +1577,24 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
     try {
       const used = new Set(entries.flatMap((e) => e.photos));
       for (const rec of await photoGetAll()) {
-        if (used.has(rec.id) && rec.blob) photos[rec.id] = await blobToDataURL(rec.blob);
+        const blob = used.has(rec.id) ? await photoBlob(rec) : null;
+        if (blob) photos[rec.id] = await blobToDataURL(blob);
       }
     } catch (e) {
       toast('写真を読み出せなかったため、写真なしで書き出します');
     }
-    const json = JSON.stringify({ app: 'kashimemo', version: 2, exportedAt: new Date().toISOString(), entries, photos });
+    const exportedAt = new Date().toISOString();
+    let json;
+    if (lockOn()) {
+      // ロック中は、今のパスワードで包んだ鍵と一緒に暗号化して書き出す
+      const data = await seal(dek, te.encode(JSON.stringify({ entries, photos })));
+      json = JSON.stringify({
+        app: 'kashimemo', version: 3, exportedAt,
+        enc: { kind: lockCfg.kind, len: lockCfg.len, kdf: lockCfg.kdf, wrap: lockCfg.wrap, data },
+      });
+    } else {
+      json = JSON.stringify({ app: 'kashimemo', version: 2, exportedAt, entries, photos });
+    }
     const name = `kashimemo-${currentDay}.json`;
     const file = new File([json], name, { type: 'application/json' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -1500,7 +1627,15 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
     let list;
     let photos = {};
     try {
-      const data = JSON.parse(await file.text());
+      let data = JSON.parse(await file.text());
+      if (data && data.enc && data.enc.wrap) {
+        const word = data.enc.kind === 'pass' ? 'パスワード' : 'パスコード';
+        const secret = await askSecret(`このファイルを書き出したときの${word}を入力してください`, data.enc.kind !== 'pass');
+        if (secret === null) return;
+        const raw = await unwrapWithSecret(secret, data.enc.kdf, data.enc.wrap);
+        if (!raw) { toast(`${word}が違います`); return; }
+        data = JSON.parse(td.decode(await unseal(await aesKey(raw), data.enc.data)));
+      }
       list = normalizeEntries(Array.isArray(data) ? data : data.entries);
       if (data && data.photos && typeof data.photos === 'object') photos = data.photos;
     } catch (e) {
@@ -1597,43 +1732,20 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshDay(); });
   window.addEventListener('pageshow', refreshDay);
   window.addEventListener('storage', (ev) => {
-    if (ev.key === DATA_KEY) { entries = normalizeEntries((load(DATA_KEY, {}) || {}).entries); render(); }
+    if (ev.key === DATA_KEY && unlocked) loadData().then(render).catch(() => {});
   });
 
-  // ---------- ロック（パスコード・顔認証） ----------
-  // 端末の中だけで完結する「開くときの鍵」。データ自体は暗号化していない
-  const LOCK_KEY = 'kashimemo.lock.v1';
+  // ---------- ロック（パスワード・顔認証） ----------
   const FAIL_KEY = 'kashimemo.lockfail.v1';
-  const PIN_ITER = 150000;
-  let lockCfg = load(LOCK_KEY, null);
-  const lockOn = () => !!(lockCfg && lockCfg.pin && lockCfg.pin.hash);
-  let unlocked = !lockOn();
   let holdLock = false;   // 写真選択・共有などで一時的にアプリを離れるときは鍵をかけない
   let authBusy = false;   // 顔認証の画面が出ている間
   let hiddenAt = 0;
-  let padState = null;         // { mode: unlock|set|confirm|verify, len, input, first, onOk }
+  let padState = null;    // { mode: unlock|set|confirm|verify, kind: pin|pass, len, input, first, purpose, onOk }
   let padBusy = false;
   const html = document.documentElement;
-
-  const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  const unb64u = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
-  const randomBytes = (n) => crypto.getRandomValues(new Uint8Array(n));
-  const saveLock = () => (lockCfg ? store(LOCK_KEY, lockCfg) : localStorage.removeItem(LOCK_KEY));
-
-  async function hashPin(pin, salt, iter) {
-    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
-    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: unb64u(salt), iterations: iter }, key, 256);
-    return b64u(bits);
-  }
-  async function checkPin(pin) {
-    return lockOn() && (await hashPin(pin, lockCfg.pin.salt, lockCfg.pin.iter)) === lockCfg.pin.hash;
-  }
-  async function savePin(pin) {
-    const salt = b64u(randomBytes(16));
-    const hash = await hashPin(pin, salt, PIN_ITER);
-    lockCfg = Object.assign({ cred: null, after: 0 }, lockCfg || {}, { pin: { salt, hash, iter: PIN_ITER, len: pin.length } });
-    saveLock();
-  }
+  const secretWord = (kind = lockCfg && lockCfg.kind) => (kind === 'pass' ? 'パスワード' : 'パスコード');
+  const lockKind = () => (isLegacyLock() ? 'pin' : lockCfg.kind);
+  const lockLen = () => (isLegacyLock() ? lockCfg.pin.len : lockCfg.len);
 
   // 5回まちがえたら30秒待つ
   const loadFails = () => load(FAIL_KEY, { n: 0, until: 0 });
@@ -1646,6 +1758,57 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
   }
   const clearFails = () => { try { localStorage.removeItem(FAIL_KEY); } catch (e) {} };
 
+  // 解除したあと、暗号化されたデータを読み込む（まだ暗号化されていないものがあれば暗号化し直す）
+  async function loadData() {
+    await saveChain;
+    const data = load(DATA_KEY, {}) || {};
+    if (data.enc) {
+      entries = normalizeEntries(JSON.parse(td.decode(await unseal(dek, data.enc))));
+    } else {
+      entries = normalizeEntries(data.entries);
+      if (lockOn()) await saveEntries();
+    }
+    if (lockOn()) await convertPhotos(true);
+  }
+  async function convertPhotos(encrypt) {
+    const recs = await photoGetAll().catch(() => []);
+    for (const rec of recs) {
+      if (encrypt ? rec.ct : !rec.ct) continue;
+      const blob = await photoBlob(rec);
+      if (!blob) continue;
+      if (encrypt) await photoPut(rec.id, blob);
+      else await photoTx('readwrite', (st) => { st.put({ id: rec.id, blob }); });
+    }
+  }
+
+  // 以前の版（暗号化なしのパスコード）との互換
+  async function legacyPinOk(pin) {
+    const key = await crypto.subtle.importKey('raw', te.encode(pin), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: unb64u(lockCfg.pin.salt), iterations: lockCfg.pin.iter }, key, 256);
+    return b64u(bits) === lockCfg.pin.hash;
+  }
+
+  // 新しく暗号化を始める
+  async function enableLock(kind, secret, after = 0) {
+    const raw = randomBytes(32);
+    await setDEK(raw);
+    const w = await wrapWithSecret(secret, raw);
+    lockCfg = { v: 2, kind, len: kind === 'pin' ? secret.length : 0, kdf: w.kdf, wrap: w.wrap, face: null, after };
+    saveLock();
+    await saveEntries();
+    await convertPhotos(true);
+  }
+  async function disableLock() {
+    await saveChain;
+    store(DATA_KEY, { version: 1, entries });
+    await convertPhotos(false);
+    lockCfg = null;
+    saveLock();
+    dropDEK();
+    clearFails();
+  }
+
+  // ---------- 顔認証（パスキーの PRF で鍵を取り出す） ----------
   async function faceAvailable() {
     try {
       return !!(window.PublicKeyCredential && window.isSecureContext
@@ -1654,6 +1817,26 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
       return false;
     }
   }
+  async function facePRF(credId, salt) {
+    const a = await navigator.credentials.get({
+      publicKey: {
+        challenge: randomBytes(32),
+        allowCredentials: [{ type: 'public-key', id: credId }],
+        userVerification: 'required',
+        timeout: 60000,
+        extensions: { prf: { eval: { first: salt } } },
+      },
+    });
+    // 顔認証（または端末のパスコード）で本人確認できたか（UV フラグ）
+    if (!a || !(new Uint8Array(a.response.authenticatorData)[32] & 0x04)) return null;
+    const r = a.getClientExtensionResults();
+    return r && r.prf && r.prf.results && r.prf.results.first ? new Uint8Array(r.prf.results.first) : null;
+  }
+  async function faceKey(secret) {
+    const base = await crypto.subtle.importKey('raw', secret, 'HKDF', false, ['deriveKey']);
+    return crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: te.encode('kashimemo-face-v1') },
+      base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
   async function faceRegister() {
     const cred = await navigator.credentials.create({
       publicKey: {
@@ -1661,27 +1844,20 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
         user: { id: randomBytes(16), name: '貸しメモ', displayName: '貸しメモ' },
         challenge: randomBytes(32),
         pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
-        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+        authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
         timeout: 60000,
         attestation: 'none',
+        extensions: { prf: {} },
       },
     });
-    lockCfg.cred = b64u(cred.rawId);
+    const salt = randomBytes(32);
+    const secret = await facePRF(cred.rawId, salt);
+    if (!secret) throw new Error('noprf');
+    lockCfg.face = { cred: b64u(cred.rawId), salt: b64u(salt), wrap: await seal(await faceKey(secret), dekRaw) };
     saveLock();
   }
-  async function faceVerify() {
-    const a = await navigator.credentials.get({
-      publicKey: {
-        challenge: randomBytes(32),
-        allowCredentials: [{ type: 'public-key', id: unb64u(lockCfg.cred) }],
-        userVerification: 'required',
-        timeout: 60000,
-      },
-    });
-    // 顔認証（または端末のパスコード）で本人確認できたか（UV フラグ）
-    return !!(a && (new Uint8Array(a.response.authenticatorData)[32] & 0x04));
-  }
 
+  // ---------- 入力画面 ----------
   function drawDots() {
     $('lockDots').innerHTML = Array.from({ length: padState.len }, (_, i) => `<i class="${i < padState.input.length ? 'on' : ''}"></i>`).join('');
   }
@@ -1691,21 +1867,31 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
   }
   function setPad(p) {
     padState = Object.assign({ input: '' }, p);
+    const isPass = p.kind === 'pass';
+    const face = p.mode === 'unlock' && lockCfg && lockCfg.face;
     padMsg(p.msg);
     $('lock').classList.add('show');
+    $('keypad').hidden = isPass;
+    $('lockDots').hidden = isPass;
+    $('passForm').hidden = !isPass;
+    $('passInput').value = '';
+    $('passFace').hidden = !(isPass && face);
+    $('padFace').hidden = !(!isPass && face);
     $('padCancel').hidden = p.mode === 'unlock';
     $('padForgot').hidden = p.mode !== 'unlock';
-    $('padFace').hidden = !(p.mode === 'unlock' && lockCfg && lockCfg.cred);
-    drawDots();
+    $('padForgot').textContent = `${secretWord(p.kind)}を忘れた場合`;
+    if (!isPass) drawDots();
   }
   function hidePad() {
     padState = null;
+    $('passInput').value = '';
     $('lock').classList.remove('show');
   }
   function padError(text) {
     padState.input = '';
-    drawDots();
     padMsg(text, true);
+    if (padState.kind === 'pass') { $('passInput').value = ''; return; }
+    drawDots();
     const d = $('lockDots');
     d.classList.remove('shake');
     void d.offsetWidth;
@@ -1717,82 +1903,132 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
     unlocked = false;
     html.classList.add('app-locked');
     html.classList.remove('app-covered');
+    if (askResolve) finishAsk(null);
     for (const o of document.querySelectorAll('.overlay.open')) closeSheet(o.id);
     if (!$('viewer').hidden) closeViewer();
     $('list').innerHTML = '';
     $('summary').innerHTML = '';
-    setPad({ mode: 'unlock', len: lockCfg.pin.len, msg: 'パスコードを入力' });
+    // メモリからもデータと鍵を消す
+    entries = [];
+    expanded.clear();
+    for (const u of photoURLs.values()) URL.revokeObjectURL(u);
+    photoURLs.clear();
+    dropDEK();
+    setPad({ mode: 'unlock', kind: lockKind(), len: lockLen(), msg: `${secretWord(lockKind())}を入力` });
     const wait = lockWait();
     if (wait) padMsg(`${wait}秒後にもう一度お試しください`, true);
-    else if (autoFace && lockCfg.cred) tryFace(true);
+    else if (autoFace && lockCfg.face) tryFace(true);
   }
-  function unlock() {
+  async function unlock() {
     unlocked = true;
     hidePad();
+    try {
+      await loadData();
+    } catch (e) {
+      toast('データを読み込めませんでした');
+    }
     html.classList.remove('app-locked', 'app-covered');
     refreshDay();
     render();
   }
 
   async function tryFace(auto = false) {
-    if (!lockCfg || !lockCfg.cred || authBusy || unlocked) return;
+    const f = lockCfg && lockCfg.face;
+    if (!f || authBusy || unlocked) return;
     authBusy = true;
     try {
-      if (await faceVerify()) { clearFails(); unlock(); }
-      else padMsg('顔認証できませんでした。パスコードを入力', true);
+      const secret = await facePRF(unb64u(f.cred), unb64u(f.salt));
+      if (!secret) throw new Error('uv');
+      await setDEK(await unseal(await faceKey(secret), f.wrap));
+      clearFails();
+      await unlock();
     } catch (e) {
-      if (!auto) padMsg('顔認証できませんでした。パスコードを入力', true);
+      if (!auto) padMsg(`顔認証できませんでした。${secretWord()}を入力`, true);
     } finally {
       authBusy = false;
     }
   }
 
+  // 入力された秘密で鍵を開けてみる（成功すれば DEK をセット）
+  async function openWith(secret) {
+    if (isLegacyLock()) {
+      if (!(await legacyPinOk(secret))) return false;
+      // 以前の版からの移行：ここで暗号化を始める
+      const hadFace = !!lockCfg.cred;
+      await enableLock('pin', secret, lockCfg.after || 0);
+      if (hadFace) toast('データを暗号化しました。顔認証はもう一度オンにしてください');
+      return true;
+    }
+    const raw = await unwrapWithSecret(secret, lockCfg.kdf, lockCfg.wrap);
+    if (!raw) return false;
+    await setDEK(raw);
+    return true;
+  }
+
   async function submitPad() {
     padBusy = true;
     const v = padState.input;
+    const word = secretWord(padState.kind);
     try {
       switch (padState.mode) {
         case 'unlock': {
           const wait = lockWait();
           if (wait) { padError(`${wait}秒後にもう一度お試しください`); break; }
-          if (await checkPin(v)) { clearFails(); unlock(); break; }
+          padMsg('確認しています…');
+          if (await openWith(v)) { clearFails(); await unlock(); break; }
           addFail();
           const w = lockWait();
-          padError(w ? `5回まちがえました。${w}秒後にもう一度お試しください` : 'パスコードが違います');
+          padError(w ? `5回まちがえました。${w}秒後にもう一度お試しください` : `${word}が違います`);
           break;
         }
         case 'set':
+          if (padState.kind === 'pass' && v.length < 8) { padError('8文字以上にしてください'); break; }
           padState.first = v;
           padState.mode = 'confirm';
           padState.input = '';
-          drawDots();
+          if (padState.kind === 'pass') $('passInput').value = ''; else drawDots();
           padMsg('確認のため、もう一度入力');
           break;
-        case 'confirm':
+        case 'confirm': {
           if (v !== padState.first) {
             padState.mode = 'set';
             padState.first = null;
-            padError('一致しませんでした。新しいパスコードをもう一度');
+            padError(`一致しませんでした。新しい${word}をもう一度`);
             break;
           }
-          await savePin(v);
-          hidePad();
-          toast('パスコードを設定しました');
+          if (padState.purpose === 'change') {
+            padMsg('変更しています…');
+            const w = await wrapWithSecret(v, dekRaw);
+            Object.assign(lockCfg, { kind: padState.kind, len: padState.kind === 'pin' ? v.length : 0, kdf: w.kdf, wrap: w.wrap });
+            saveLock();
+            hidePad();
+            toast(`${word}を変更しました`);
+          } else {
+            padMsg('暗号化しています…');
+            await enableLock(padState.kind, v);
+            hidePad();
+            toast('暗号化してロックをオンにしました');
+          }
           break;
-        case 'verify':
-          if (await checkPin(v)) { const ok = padState.onOk; hidePad(); ok(); }
-          else padError('パスコードが違います');
+        }
+        case 'verify': {
+          padMsg('確認しています…');
+          const raw = await unwrapWithSecret(v, lockCfg.kdf, lockCfg.wrap);
+          if (!raw) { padError(`${word}が違います`); break; }
+          const ok = padState.onOk;
+          await ok();
           break;
+        }
       }
     } catch (e) {
-      padError('この画面ではパスコードを使えません（https で開いてください）');
+      padError('この画面では使えません（ホーム画面のアイコンから開いてください）');
     } finally {
       padBusy = false;
     }
   }
 
   function padKey(k) {
-    if (!padState || padBusy) return;
+    if (!padState || padState.kind !== 'pin' || padBusy) return;
     if (k === 'del') { padState.input = padState.input.slice(0, -1); drawDots(); return; }
     if (padState.input.length >= padState.len) return;
     padState.input += k;
@@ -1804,14 +2040,23 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
     if (b) padKey(b.dataset.k);
   });
   document.addEventListener('keydown', (ev) => {
-    if (!padState) return;
+    if (!padState || padState.kind !== 'pin') return;
     if (/^[0-9]$/.test(ev.key)) padKey(ev.key);
     else if (ev.key === 'Backspace') padKey('del');
   });
+  $('passForm').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    if (!padState || padBusy) return;
+    padState.input = $('passInput').value;
+    if (!padState.input) return;
+    submitPad();
+  });
   $('padFace').addEventListener('click', () => tryFace(false));
+  $('passFace').addEventListener('click', () => tryFace(false));
   $('padCancel').addEventListener('click', hidePad);
   $('padForgot').addEventListener('click', async () => {
-    if (!confirm('パスコードを忘れた場合は、このアプリのデータをすべて消して最初からやり直すしかありません。\n（バックアップのファイルがあれば、あとで読み込んで戻せます）\n\n続けますか？')) return;
+    const word = secretWord(lockKind());
+    if (!confirm(`${word}を忘れた場合、暗号化されたデータは誰にも戻せません。すべて消して最初からやり直すしかありません。\n（バックアップのファイルと、書き出したときの${word}があれば、あとで読み込んで戻せます）\n\n続けますか？`)) return;
     if (!confirm('本当にすべてのデータを消しますか？　元に戻せません。')) return;
     try {
       for (const k of [DATA_KEY, PREF_KEY, LOCK_KEY, FAIL_KEY]) localStorage.removeItem(k);
@@ -1824,32 +2069,55 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
     location.reload();
   });
 
+  // ---------- パスワードをたずねる小さな画面（暗号化バックアップの読み込み用） ----------
+  let askResolve = null;
+  function askSecret(msg, numeric) {
+    $('askMsg').textContent = msg;
+    $('askInput').value = '';
+    $('askInput').inputMode = numeric ? 'numeric' : 'text';
+    openSheet('askSheet');
+    return new Promise((resolve) => { askResolve = resolve; });
+  }
+  function finishAsk(value) {
+    const r = askResolve;
+    askResolve = null;
+    if ($('askSheet').classList.contains('open')) closeSheet('askSheet');
+    $('askInput').value = '';
+    if (r) r(value);
+  }
+  $('askForm').addEventListener('submit', (ev) => { ev.preventDefault(); finishAsk($('askInput').value); });
+  $('askSheet').addEventListener('click', (ev) => {
+    if (ev.target === $('askSheet') || ev.target.closest('[data-close]')) finishAsk(null);
+  });
+
   // ---------- ロック設定シート ----------
   async function renderLockSettings() {
     const body = $('lockBody');
     if (!window.isSecureContext || !(window.crypto && crypto.subtle)) {
-      body.innerHTML = '<p class="backup-note">ロックは、ホーム画面のアイコン（https のページ）から開いたときに使えます。</p>';
+      body.innerHTML = '<p class="backup-note">ロックと暗号化は、ホーム画面のアイコン（https のページ）から開いたときに使えます。</p>';
       return;
     }
     if (!lockOn()) {
       body.innerHTML = `
-        <div class="lock-status off">ロック：<b>オフ</b></div>
+        <div class="lock-status off">ロックと暗号化：<b>オフ</b></div>
         <div class="backup-list">
-          <button class="btn primary" type="button" data-lock="set6">6桁のパスコードを設定<small>おすすめ。設定したあと顔認証もオンにできます</small></button>
-          <button class="btn" type="button" data-lock="set4">4桁のパスコードを設定</button>
+          <button class="btn primary" type="button" data-lock="setPass">英数字のパスワードで暗号化<small>おすすめ。8文字以上。数字だけより解析されにくい</small></button>
+          <button class="btn" type="button" data-lock="set6">6桁の数字で暗号化</button>
+          <button class="btn" type="button" data-lock="set4">4桁の数字で暗号化<small>入力は楽ですが、解析ツールで破られやすくなります</small></button>
         </div>
-        <p class="backup-note">オンにすると、アプリを開くたびにパスコード（または顔認証）が必要になります。</p>`;
+        <p class="backup-note">オンにすると、データと写真を暗号化して保存し、開くたびにパスワード（または顔認証）が必要になります。パスワードを忘れると、誰にもデータを戻せません。</p>`;
       return;
     }
     const face = await faceAvailable();
     const after = lockCfg.after || 0;
+    const kindText = lockCfg.kind === 'pass' ? '英数字パスワード' : `${lockCfg.len}桁の数字`;
     body.innerHTML = `
-      <div class="lock-status">ロック：<b>オン</b>（パスコード${lockCfg.pin.len}桁${lockCfg.cred ? '＋顔認証' : ''}）</div>
+      <div class="lock-status">ロックと暗号化：<b>オン</b>（${kindText}${lockCfg.face ? '＋顔認証' : ''}）<br><small style="font-weight:600;color:var(--muted)">データと写真は暗号化して保存されています</small></div>
       <div class="backup-list">
         ${face
-          ? (lockCfg.cred
+          ? (lockCfg.face
             ? '<button class="btn" type="button" data-lock="faceOff">顔認証をオフにする</button>'
-            : '<button class="btn primary" type="button" data-lock="faceOn">顔認証（Face ID）をオンにする<small>iPhone の確認画面が出たら「続ける」を押してください</small></button>')
+            : '<button class="btn primary" type="button" data-lock="faceOn">顔認証（Face ID）をオンにする<small>iPhone の確認画面が2回出ます。どちらも「続ける」を押してください</small></button>')
           : '<p class="backup-note" style="margin:0">この画面では顔認証が使えません。ホーム画面のアイコンから開くと使える場合があります。</p>'}
         <div class="field" style="margin:4px 0 0">
           <label for="lockAfter">アプリを離れてから鍵をかけるまで</label>
@@ -1860,10 +2128,10 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
           </select>
         </div>
         <button class="btn" type="button" data-lock="now">今すぐロックする</button>
-        <button class="btn" type="button" data-lock="change">パスコードを変更</button>
-        <button class="btn danger" type="button" data-lock="off">ロックをオフにする</button>
+        <button class="btn" type="button" data-lock="change">${secretWord()}を変更</button>
+        <button class="btn danger" type="button" data-lock="off">ロックと暗号化をオフにする</button>
       </div>
-      <p class="backup-note">アプリを開くときの鍵です。iPhone 本体のロック（パスコード）と合わせて使ってください。パスコードを忘れるとデータを消すしかないので、バックアップもときどき取っておいてください。</p>`;
+      <p class="backup-note">${secretWord()}を忘れると、データを消すしかありません。バックアップを書き出すときも暗号化され、読み込むには書き出したときの${secretWord()}が必要です。</p>`;
   }
 
   $('lockBtn').addEventListener('click', () => { renderLockSettings(); openSheet('lockSheet'); });
@@ -1876,26 +2144,31 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
   $('lockBody').addEventListener('click', async (ev) => {
     const b = ev.target.closest('[data-lock]');
     if (!b) return;
+    const word = secretWord();
     switch (b.dataset.lock) {
+      case 'setPass':
       case 'set6':
-      case 'set4':
+      case 'set4': {
         closeSheet('lockSheet');
-        setPad({ mode: 'set', len: b.dataset.lock === 'set6' ? 6 : 4, msg: '新しいパスコードを入力' });
+        const kind = b.dataset.lock === 'setPass' ? 'pass' : 'pin';
+        setPad({ mode: 'set', kind, len: b.dataset.lock === 'set4' ? 4 : 6, msg: kind === 'pass' ? '新しいパスワードを入力（8文字以上）' : '新しいパスコードを入力' });
         break;
+      }
       case 'faceOn':
         authBusy = true;
         try {
           await faceRegister();
           toast('顔認証をオンにしました');
         } catch (e) {
-          toast(e && e.name === 'NotAllowedError' ? 'キャンセルされました' : '顔認証を設定できませんでした');
+          toast(e && e.message === 'noprf' ? 'この端末では顔認証での暗号解除に対応していません'
+            : e && e.name === 'NotAllowedError' ? 'キャンセルされました' : '顔認証を設定できませんでした');
         } finally {
           authBusy = false;
           renderLockSettings();
         }
         break;
       case 'faceOff':
-        lockCfg.cred = null;
+        lockCfg.face = null;
         saveLock();
         renderLockSettings();
         toast('顔認証をオフにしました');
@@ -1907,15 +2180,23 @@ html.app-covered:not(.app-locked) .lock:not(.show) .pad-area { visibility: hidde
       case 'change':
         closeSheet('lockSheet');
         setPad({
-          mode: 'verify', len: lockCfg.pin.len, msg: '今のパスコードを入力',
-          onOk: () => setPad({ mode: 'set', len: lockCfg.pin.len, msg: '新しいパスコードを入力' }),
+          mode: 'verify', kind: lockCfg.kind, len: lockCfg.len, msg: `今の${word}を入力`,
+          onOk: () => setPad({
+            mode: 'set', purpose: 'change', kind: lockCfg.kind, len: lockCfg.len,
+            msg: lockCfg.kind === 'pass' ? '新しいパスワードを入力（8文字以上）' : '新しいパスコードを入力',
+          }),
         });
         break;
       case 'off':
         closeSheet('lockSheet');
         setPad({
-          mode: 'verify', len: lockCfg.pin.len, msg: 'ロックをオフにするにはパスコードを入力',
-          onOk: () => { lockCfg = null; saveLock(); clearFails(); toast('ロックをオフにしました'); },
+          mode: 'verify', kind: lockCfg.kind, len: lockCfg.len, msg: `オフにするには${word}を入力`,
+          onOk: async () => {
+            padMsg('暗号化を解除しています…');
+            await disableLock();
+            hidePad();
+            toast('ロックと暗号化をオフにしました');
+          },
         });
         break;
     }
