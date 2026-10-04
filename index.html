@@ -369,6 +369,51 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
 .error { margin: -4px 0 12px; color: var(--red); font-size: 14px; font-weight: 700; }
 .sheet-actions { display: grid; grid-template-columns: 1fr 2fr; gap: 8px; margin-top: 4px; }
 
+/* ---------- 返済日・電話・写真 ---------- */
+.tags { display: block; margin-top: 4px; }
+.due {
+  display: inline-block; padding: 1px 8px;
+  border-radius: 999px; border: 1px solid var(--line);
+  font-size: 12px; font-weight: 800; color: var(--muted);
+}
+.due.soon { color: var(--yellow); border-color: var(--yellow); }
+.due.late { color: var(--red); border-color: var(--red); }
+.tel { color: var(--yellow); text-decoration: none; border-bottom: 1px dashed var(--yellow); }
+.label-row { display: flex; justify-content: space-between; align-items: center; min-height: 24px; margin-bottom: 6px; }
+.label-row label { font-size: 13px; font-weight: 800; color: var(--muted); }
+.mini { border: 0; background: none; color: var(--muted); font-size: 13px; font-weight: 700; padding: 0 2px; min-height: 24px; text-decoration: underline; }
+.photos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.photo {
+  position: relative; aspect-ratio: 1 / 1; padding: 0;
+  border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface-2); overflow: hidden;
+}
+.photo img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.photo .rm {
+  position: absolute; top: 4px; right: 4px;
+  width: 28px; height: 28px; border-radius: 50%; border: 0;
+  background: rgba(0,0,0,.75); color: #fff; font-size: 14px; line-height: 1;
+}
+.photo-add {
+  aspect-ratio: 1 / 1;
+  border-radius: 10px; border: 1px dashed var(--yellow);
+  background: transparent; color: var(--yellow);
+  font-size: 13px; font-weight: 800; line-height: 1.3;
+}
+.photo-add b { display: block; font-size: 24px; line-height: 1; }
+
+.viewer {
+  position: fixed; inset: 0; z-index: 70;
+  display: flex; flex-direction: column;
+  background: #000;
+  padding: calc(var(--safe-t) + 8px) 12px calc(var(--safe-b) + 12px);
+}
+.viewer[hidden] { display: none; }
+.viewer-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--muted); font-size: 15px; font-weight: 700; }
+.viewer-img { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 12px 0; }
+.viewer-img img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 6px; }
+.viewer-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
 .backup-list { display: grid; gap: 10px; }
 .backup-list .btn { width: 100%; text-align: left; padding: 12px 14px; }
 .backup-list .btn small { display: block; font-weight: 600; font-size: 13px; color: var(--muted); }
@@ -456,6 +501,7 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
         <option value="kana">あいうえお順</option>
         <option value="big">枠が大きい順</option>
         <option value="small">枠が小さい順</option>
+        <option value="due">返済日が近い順</option>
       </select>
       <button class="toggle" id="hideDone" type="button" aria-pressed="false">完済を隠す</button>
     </div>
@@ -496,6 +542,16 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
         <div class="static" id="fMemoDate"></div>
       </div>
     </div>
+    <div class="row2">
+      <div class="field">
+        <div class="label-row"><label for="fDue">返済予定日</label><button class="mini" type="button" id="fDueClear">消す</button></div>
+        <input class="input" id="fDue" type="date">
+      </div>
+      <div class="field">
+        <div class="label-row"><label for="fPhone">電話番号</label></div>
+        <input class="input" id="fPhone" type="tel" inputmode="tel" autocomplete="off" placeholder="090-1234-5678">
+      </div>
+    </div>
     <div class="field">
       <label for="fPrincipal">元金（枠）<span class="req">必須</span></label>
       <input class="input" id="fPrincipal" type="text" inputmode="decimal" autocomplete="off" placeholder="例：10">
@@ -522,6 +578,12 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
     <div class="field">
       <label for="fNote">メモ</label>
       <textarea class="input" id="fNote" rows="3"></textarea>
+    </div>
+    <div class="field">
+      <span class="label">写真</span>
+      <div class="photos" id="fPhotos"></div>
+      <input type="file" id="fPhotoInput" accept="image/*" multiple hidden>
+      <div class="help">写真は小さくしてこのスマホの中に保存します</div>
     </div>
     <div class="error" id="fError" hidden></div>
     <div class="sheet-actions">
@@ -576,6 +638,19 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
       <input type="file" id="importFile" accept="application/json,.json" hidden>
     </div>
     <p class="backup-note">データはこのスマホの中にだけ保存されています。機種変更のときや念のために、ときどき書き出して「ファイル」アプリなどに保存してください。</p>
+  </div>
+</div>
+
+<!-- 写真ビューア -->
+<div class="viewer" id="viewer" hidden role="dialog" aria-modal="true" aria-label="写真">
+  <div class="viewer-bar">
+    <span id="viewerCount"></span>
+    <button class="icon-btn" type="button" id="viewerClose">閉じる</button>
+  </div>
+  <div class="viewer-img"><img id="viewerImg" alt=""></div>
+  <div class="viewer-nav" id="viewerNav">
+    <button class="btn" type="button" id="viewerPrev">◀ 前へ</button>
+    <button class="btn" type="button" id="viewerNext">次へ ▶</button>
   </div>
 </div>
 
@@ -671,10 +746,107 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
         surcharge: Math.max(0, parseNum(e.surcharge) || 0),
         interval: Math.max(0, Math.floor(parseNum(e.interval) || 0)),
         note: String(e.note || ''),
-        repayments: (Array.isArray(e.repayments) ? e.repayments : [])
+        dueDate: validDate(e.dueDate) || '',
+        phone: String(e.phone || '').trim(),
+        photos: (Array.isArray(e.photos) ? e.photos : []).filter((p) => typeof p === 'string' && p),
+        repayments:(Array.isArray(e.repayments) ? e.repayments : [])
           .filter((r) => r && validDate(r.date) && parseNum(r.amount) > 0)
           .map((r) => ({ id: String(r.id || uid()), date: r.date, amount: parseNum(r.amount) })),
       }));
+  }
+
+  // ---------- 写真（IndexedDB に保存） ----------
+  let dbPromise = null;
+  function openDB() {
+    if (!dbPromise) {
+      dbPromise = new Promise((resolve, reject) => {
+        const req = indexedDB.open('kashimemo', 1);
+        req.onupgradeneeded = () => req.result.createObjectStore('photos', { keyPath: 'id' });
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      dbPromise.catch(() => { dbPromise = null; });
+    }
+    return dbPromise;
+  }
+  async function photoTx(mode, fn) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('photos', mode);
+      const req = fn(tx.objectStore('photos'));
+      tx.oncomplete = () => resolve(req ? req.result : undefined);
+      tx.onerror = tx.onabort = () => reject(tx.error);
+    });
+  }
+  const photoPut = (id, blob) => photoTx('readwrite', (st) => { st.put({ id, blob }); });
+  const photoGet = (id) => photoTx('readonly', (st) => st.get(id));
+  const photoGetAll = () => photoTx('readonly', (st) => st.getAll());
+  const photoClear = () => photoTx('readwrite', (st) => { st.clear(); });
+  function photoDel(ids) {
+    for (const id of ids) {
+      const u = photoURLs.get(id);
+      if (u) { URL.revokeObjectURL(u); photoURLs.delete(id); }
+    }
+    return ids.length ? photoTx('readwrite', (st) => { ids.forEach((id) => st.delete(id)); }).catch(() => {}) : Promise.resolve();
+  }
+
+  const photoURLs = new Map();
+  async function photoURL(id) {
+    if (photoURLs.has(id)) return photoURLs.get(id);
+    const rec = await photoGet(id);
+    if (!rec || !rec.blob) return null;
+    const u = URL.createObjectURL(rec.blob);
+    photoURLs.set(id, u);
+    return u;
+  }
+  function hydratePhotos(root) {
+    for (const img of root.querySelectorAll('img[data-photo]:not([src])')) {
+      photoURL(img.dataset.photo).then((u) => { if (u) img.src = u; }).catch(() => {});
+    }
+  }
+  // 長い辺を 1280px までに縮小して JPEG にする（向きはブラウザが補正）
+  async function shrinkImage(file) {
+    const src = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.src = src;
+      await img.decode();
+      const scale = Math.min(1, 1280 / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.naturalWidth * scale));
+      c.height = Math.max(1, Math.round(img.naturalHeight * scale));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      return await new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob'))), 'image/jpeg', 0.82));
+    } finally {
+      URL.revokeObjectURL(src);
+    }
+  }
+  function blobToDataURL(blob) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(blob);
+    });
+  }
+  function dataURLToBlob(s) {
+    const [head, body] = s.split(',');
+    const mime = (head.match(/^data:([^;,]+)/) || [])[1] || 'image/jpeg';
+    const bin = atob(body);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  }
+
+  // ---------- 返済予定日 ----------
+  function dueInfo(e, c, T) {
+    if (!e.dueDate || c.done) return null;
+    const d = toDays(e.dueDate) - T;
+    const day = fmtDate(e.dueDate, false);
+    if (d < 0) return { cls: 'late', text: `返済日 ${day}・${-d}日過ぎ` };
+    if (d === 0) return { cls: 'late', text: '今日が返済日' };
+    if (d <= 3) return { cls: 'soon', text: `返済日 ${day}・あと${d}日` };
+    return { cls: '', text: `返済日 ${day}` };
   }
 
   // ---------- 計算 ----------
@@ -779,7 +951,11 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
     const q = norm($('search').value);
     let rows = entries.map((e) => ({ e, c: compute(e, T) }));
     const activeAll = rows.filter((r) => !r.c.done);
-    if (q) rows = rows.filter(({ e }) => norm(e.name).includes(q) || norm(e.kana).includes(q));
+    const qDigits = q.replace(/\D/g, '');
+    if (q) {
+      rows = rows.filter(({ e }) => norm(e.name).includes(q) || norm(e.kana).includes(q)
+        || (qDigits.length >= 3 && qDigits === q.replace(/[-()+]/g, '') && e.phone.replace(/\D/g, '').includes(qDigits)));
+    }
     if (prefs.hideDone) rows = rows.filter((r) => !r.c.done);
 
     const key = (e) => e.kana || e.name;
@@ -788,6 +964,7 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
       kana: byKana,
       big: (a, b) => b.e.principal - a.e.principal || byKana(a, b),
       small: (a, b) => a.e.principal - b.e.principal || byKana(a, b),
+      due: (a, b) => (!a.e.dueDate - !b.e.dueDate) || a.e.dueDate.localeCompare(b.e.dueDate) || byKana(a, b),
     }[prefs.sort] || byKana;
     rows.sort((a, b) => (a.c.done - b.c.done) || cmp(a, b));
 
@@ -809,15 +986,22 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
       $('list').innerHTML = `<div class="empty" style="padding-top:28px"><p>見つかりませんでした</p></div>`;
       return;
     }
-    $('list').innerHTML = rows.map(({ e, c }) => card(e, c)).join('');
+    $('list').innerHTML = rows.map(({ e, c }) => card(e, c, T)).join('');
+    hydratePhotos($('list'));
   }
 
-  function card(e, c) {
+  function card(e, c, T) {
     const open = expanded.has(e.id);
     const head = c.done
       ? `<span class="stamp">完済</span>`
       : `<span class="head-amt"><span class="lbl">残り</span><span class="val">${fmt(c.remaining)}</span></span>`;
     const sub = [e.kana, `合計 ${fmt(c.total)}`, `${fmtDate(e.lentDate, false)}〜`].filter(Boolean).map(esc).join('　');
+    const due = dueInfo(e, c, T);
+    const tel = e.phone.replace(/[^\d+]/g, '');
+    const photos = e.photos.length
+      ? `<div class="reps"><h3>写真（${e.photos.length}枚）</h3><div class="photos">${e.photos.map((p, i) => `
+          <button class="photo" type="button" data-act="photo" data-id="${e.id}" data-index="${i}" aria-label="写真${i + 1}を開く"><img data-photo="${esc(p)}" alt=""></button>`).join('')}</div></div>`
+      : '';
 
     let next;
     if (c.done) next = `<div class="next ok"><b>完済</b>　${fmtDate(c.settledDate)}${c.remaining < 0 ? `（${fmt(-c.remaining)} 多く返済）` : ''}</div>`;
@@ -836,7 +1020,7 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
     return `
       <article class="card${c.done ? ' done' : ''}">
         <button class="card-head" type="button" data-act="toggle" data-id="${e.id}" aria-expanded="${open}">
-          <span class="who"><span class="name">${esc(e.name)}</span><span class="sub">${sub}</span></span>
+          <span class="who"><span class="name">${esc(e.name)}</span><span class="sub">${sub}</span>${due ? `<span class="tags"><span class="due ${due.cls}">${esc(due.text)}</span></span>` : ''}</span>
           ${head}
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
         </button>
@@ -848,6 +1032,8 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
             <div><span class="k">割増し</span><span class="v">${e.surcharge > 0 && e.interval > 0 ? `+${fmt(e.surcharge)} / ${e.interval}日ごと` : 'なし'}</span></div>
             <div><span class="k">加算回数</span><span class="v">${c.periods}回</span></div>
             <div><span class="k">経過日数</span><span class="v">${c.elapsed}日</span></div>
+            <div><span class="k">返済予定日</span><span class="v">${e.dueDate ? fmtDate(e.dueDate) : '—'}</span></div>
+            <div><span class="k">電話番号</span><span class="v">${e.phone ? `<a class="tel" href="tel:${esc(tel)}">${esc(e.phone)}</a>` : '—'}</span></div>
           </div>
           <div class="totals">
             <div class="box hl"><span class="lbl">合計</span><span class="val">${fmt(c.total)}</span></div>
@@ -857,6 +1043,7 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
           ${next}
           <div class="reps"><h3>返済の記録（${c.reps.length}回）</h3>${reps}</div>
           ${e.note ? `<div class="note">${esc(e.note)}</div>` : ''}
+          ${photos}
           <div class="actions">
             <button class="btn primary" type="button" data-act="repay" data-id="${e.id}">返済を記録</button>
             <button class="btn" type="button" data-act="edit" data-id="${e.id}">編集</button>
@@ -882,8 +1069,12 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
       case 'edit':
         openEntry(e);
         break;
+      case 'photo':
+        openViewer(e.photos, Number(b.dataset.index));
+        break;
       case 'del':
         if (confirm(`「${e.name}」の記録を削除しますか？\n（元に戻せません）`)) {
+          photoDel(e.photos);
           entries = entries.filter((x) => x.id !== e.id);
           expanded.delete(e.id);
           saveEntries();
@@ -924,6 +1115,7 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
   }
   function closeSheet(id) {
     const o = $(id);
+    if (id === 'entrySheet') discardFormPhotos();
     o.classList.remove('open');
     o.setAttribute('aria-hidden', 'true');
     if (!document.querySelector('.overlay.open')) document.documentElement.classList.remove('locked');
@@ -936,6 +1128,7 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
   }
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
+    if (!$('viewer').hidden) { closeViewer(); return; }
     const o = document.querySelector('.overlay.open');
     if (o) closeSheet(o.id);
   });
@@ -945,9 +1138,55 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
   const f = {
     name: $('fName'), kana: $('fKana'), lent: $('fLent'), principal: $('fPrincipal'),
     surcharge: $('fSurcharge'), interval: $('fInterval'), note: $('fNote'),
+    due: $('fDue'), phone: $('fPhone'),
   };
 
+  // 編集中の写真。保存を押すまで IndexedDB には書かない
+  let formPhotos = [];   // { id, isNew, blob?, url? }
+  let removedPhotos = [];
+  let savingPhotos = false;
+
+  function discardFormPhotos() {
+    for (const p of formPhotos) if (p.isNew && p.url) URL.revokeObjectURL(p.url);
+    formPhotos = [];
+    removedPhotos = [];
+  }
+  function renderFormPhotos() {
+    $('fPhotos').innerHTML = formPhotos.map((p, i) => `
+      <div class="photo">
+        <img ${p.url ? `src="${p.url}"` : `data-photo="${esc(p.id)}"`} alt="">
+        <button class="rm" type="button" data-rm="${i}" aria-label="写真${i + 1}を外す">✕</button>
+      </div>`).join('')
+      + `<button class="photo-add" type="button" id="fPhotoAdd"><b>＋</b>写真</button>`;
+    hydratePhotos($('fPhotos'));
+  }
+  $('fPhotos').addEventListener('click', (ev) => {
+    if (ev.target.closest('#fPhotoAdd')) { $('fPhotoInput').click(); return; }
+    const rm = ev.target.closest('[data-rm]');
+    if (!rm) return;
+    const [p] = formPhotos.splice(Number(rm.dataset.rm), 1);
+    if (p.isNew) URL.revokeObjectURL(p.url); else removedPhotos.push(p.id);
+    renderFormPhotos();
+  });
+  $('fPhotoInput').addEventListener('change', async () => {
+    const files = Array.from($('fPhotoInput').files || []);
+    $('fPhotoInput').value = '';
+    let failed = 0;
+    for (const file of files) {
+      try {
+        const blob = await shrinkImage(file);
+        formPhotos.push({ id: uid(), isNew: true, blob, url: URL.createObjectURL(blob) });
+      } catch (e) {
+        failed++;
+      }
+    }
+    renderFormPhotos();
+    if (failed) toast(`${failed}枚の写真を読み込めませんでした`);
+  });
+  $('fDueClear').addEventListener('click', () => { f.due.value = ''; });
+
   function openEntry(e, preset = {}) {
+    discardFormPhotos();
     editingId = e ? e.id : null;
     $('entryTitle').textContent = e ? '編集' : '新規登録';
     const src = e || preset;
@@ -958,6 +1197,10 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
     f.surcharge.value = src.surcharge ? String(src.surcharge) : '';
     f.interval.value = e && e.interval ? String(e.interval) : '';
     f.note.value = src.note || '';
+    f.due.value = e ? e.dueDate : '';
+    f.phone.value = e ? e.phone : '';
+    formPhotos = (e ? e.photos : []).map((id) => ({ id, isNew: false }));
+    renderFormPhotos();
     $('fMemoDate').textContent = fmtDate(e ? e.memoDate : currentDay) + (e ? '' : '（自動）');
     $('fError').hidden = true;
     updatePreview();
@@ -973,6 +1216,8 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
       surcharge: f.surcharge.value.trim() === '' ? 0 : parseNum(f.surcharge.value),
       interval: f.interval.value.trim() === '' ? 0 : parseNum(f.interval.value),
       note: f.note.value.trim(),
+      dueDate: f.due.value ? validDate(f.due.value) : '',
+      phone: f.phone.value.trim(),
     };
   }
 
@@ -983,6 +1228,7 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
     if (v.surcharge === null || v.surcharge < 0) return '割増しを数字で入力してください';
     if (v.interval === null || v.interval < 0 || !Number.isInteger(v.interval)) return '「何日ごとに増える」は整数で入力してください';
     if (v.surcharge > 0 && v.interval === 0) return '割増しを入れた場合は「何日ごとに増える」も入力してください';
+    if (v.dueDate === null) return '返済予定日の形式が正しくありません';
     return null;
   }
 
@@ -1013,8 +1259,9 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
     f.surcharge.value = String(r2(p * Number(b.dataset.quick)));
     updatePreview();
   });
-  $('entryForm').addEventListener('submit', (ev) => {
+  $('entryForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
+    if (savingPhotos) return;
     const v = readForm();
     const err = validate(v);
     if (err) {
@@ -1022,9 +1269,25 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
       $('fError').hidden = false;
       return;
     }
+    savingPhotos = true;
+    try {
+      for (const p of formPhotos) if (p.isNew) await photoPut(p.id, p.blob);
+    } catch (e) {
+      savingPhotos = false;
+      $('fError').textContent = '写真を保存できませんでした（スマホの空き容量を確認してください）';
+      $('fError').hidden = false;
+      return;
+    }
+    savingPhotos = false;
+    // 保存した写真の表示用 URL はキャッシュに移して使い回す
+    for (const p of formPhotos) {
+      if (p.isNew) { photoURLs.set(p.id, p.url); p.isNew = false; }
+    }
+    photoDel(removedPhotos);
     const data = {
       name: v.name, kana: v.kana, lentDate: v.lentDate, principal: v.principal,
       surcharge: v.surcharge, interval: v.interval, note: v.note,
+      dueDate: v.dueDate, phone: v.phone, photos: formPhotos.map((p) => p.id),
     };
     if (editingId) {
       const e = entries.find((x) => x.id === editingId);
@@ -1074,11 +1337,21 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
 
   // ---------- バックアップ ----------
   $('backupBtn').addEventListener('click', () => {
-    $('exportInfo').textContent = `今のデータ ${entries.length}件をファイルに保存します`;
+    const n = entries.reduce((s, e) => s + e.photos.length, 0);
+    $('exportInfo').textContent = `今のデータ ${entries.length}件${n ? `（写真${n}枚も含む）` : ''}をファイルに保存します`;
     openSheet('backupSheet');
   });
   $('exportBtn').addEventListener('click', async () => {
-    const json = JSON.stringify({ app: 'kashimemo', version: 1, exportedAt: new Date().toISOString(), entries }, null, 2);
+    const photos = {};
+    try {
+      const used = new Set(entries.flatMap((e) => e.photos));
+      for (const rec of await photoGetAll()) {
+        if (used.has(rec.id) && rec.blob) photos[rec.id] = await blobToDataURL(rec.blob);
+      }
+    } catch (e) {
+      toast('写真を読み出せなかったため、写真なしで書き出します');
+    }
+    const json = JSON.stringify({ app: 'kashimemo', version: 2, exportedAt: new Date().toISOString(), entries, photos });
     const name = `kashimemo-${currentDay}.json`;
     const file = new File([json], name, { type: 'application/json' });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -1104,21 +1377,74 @@ textarea.input { min-height: 84px; resize: vertical; line-height: 1.5; }
     $('importFile').value = '';
     if (!file) return;
     let list;
+    let photos = {};
     try {
       const data = JSON.parse(await file.text());
       list = normalizeEntries(Array.isArray(data) ? data : data.entries);
+      if (data && data.photos && typeof data.photos === 'object') photos = data.photos;
     } catch (e) {
       toast('ファイルを読み込めませんでした');
       return;
     }
     if (!list.length) { toast('データが入っていないファイルです'); return; }
     if (!confirm(`${list.length}件のデータを読み込みます。\n今のデータ（${entries.length}件）は置き換わります。よろしいですか？`)) return;
+    // 写真も入れ替える（ファイルに入っていない写真は外す）
+    let photoFailed = false;
+    try {
+      for (const u of photoURLs.values()) URL.revokeObjectURL(u);
+      photoURLs.clear();
+      await photoClear();
+      for (const e of list) {
+        const kept = [];
+        for (const id of e.photos) {
+          if (typeof photos[id] !== 'string' || !photos[id].startsWith('data:')) continue;
+          await photoPut(id, dataURLToBlob(photos[id]));
+          kept.push(id);
+        }
+        e.photos = kept;
+      }
+    } catch (e) {
+      photoFailed = true;
+      for (const x of list) x.photos = [];
+    }
     entries = list;
     expanded.clear();
     saveEntries();
     closeSheet('backupSheet');
     render();
-    toast(`${list.length}件を読み込みました`);
+    toast(`${list.length}件を読み込みました${photoFailed ? '（写真は読み込めませんでした）' : ''}`);
+  });
+
+  // ---------- 写真ビューア ----------
+  let viewerList = [];
+  let viewerIndex = 0;
+  async function showViewerPhoto() {
+    const id = viewerList[viewerIndex];
+    $('viewerCount').textContent = `${viewerIndex + 1} / ${viewerList.length}`;
+    $('viewerImg').removeAttribute('src');
+    const u = await photoURL(id).catch(() => null);
+    if (viewerList[viewerIndex] === id && u) $('viewerImg').src = u;
+  }
+  function openViewer(list, index) {
+    viewerList = list.slice();
+    viewerIndex = Math.max(0, Math.min(index || 0, viewerList.length - 1));
+    $('viewerNav').hidden = viewerList.length < 2;
+    $('viewer').hidden = false;
+    document.documentElement.classList.add('locked');
+    showViewerPhoto();
+  }
+  function closeViewer() {
+    $('viewer').hidden = true;
+    if (!document.querySelector('.overlay.open')) document.documentElement.classList.remove('locked');
+  }
+  $('viewerClose').addEventListener('click', closeViewer);
+  $('viewerPrev').addEventListener('click', () => {
+    viewerIndex = (viewerIndex - 1 + viewerList.length) % viewerList.length;
+    showViewerPhoto();
+  });
+  $('viewerNext').addEventListener('click', () => {
+    viewerIndex = (viewerIndex + 1) % viewerList.length;
+    showViewerPhoto();
   });
 
   // ---------- トースト ----------
